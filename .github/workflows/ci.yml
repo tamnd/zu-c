@@ -1,0 +1,183 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The whole kit against the engine at its own HEAD, which is what
+  # makes a red job here mean this wrapper is wrong about the ABI rather
+  # than that a checked-in copy of something is stale. Two compilers,
+  # because the header is where a difference between them shows up and a
+  # header-only library has no build of its own to catch it first.
+  engine:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+          - os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+          - os: macos-latest
+            cc: clang
+            cxx: clang++
+    runs-on: ${{ matrix.os }}
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/checkout@v5
+        with:
+          repository: tamnd/zu
+          path: engine
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - uses: lukka/get-cmake@latest
+
+      # zu.h is not vendored here, so there is no copy to drift. What
+      # can drift is the revision this wrapper was written against,
+      # which CMakeLists warns about at configure time and which is
+      # worth failing on rather than warning about in CI.
+      - name: The ABI this wrapper speaks is the ABI the engine offers
+        run: |
+          set -eu
+          engine_abi="$(sed -n 's/^#define ZU_ABI_VERSION "\(.*\)"$/\1/p' \
+              engine/crates/zu-capi/include/zu.h)"
+          client_abi="$(sed -n 's/.*VERSION_EQUAL "\(.*\)")$/\1/p' CMakeLists.txt)"
+          test -n "$engine_abi"
+          test -n "$client_abi"
+          echo "engine $engine_abi, wrapper $client_abi"
+          test "$engine_abi" = "$client_abi"
+
+      - name: Build libzu
+        working-directory: engine
+        run: cargo build --release -p zu-capi
+
+      # -Werror here and nowhere else. A user compiling the header with
+      # a warning flag this repository has never heard of should get a
+      # warning, not a failure; this repository's own code is held to
+      # the stricter line.
+      - name: Configure
+        run: >
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          -DZU_ROOT="$GITHUB_WORKSPACE/engine"
+          -DZU_CPP_WERROR=ON
+
+      - name: Build
+        run: cmake --build build
+
+      # The suite and every example, twice over: each test file is built
+      # once at C++23 and once at the C++20 floor, and ctest runs both.
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -j2
+
+      # Not for the numbers, which mean nothing on a shared runner, but
+      # because a benchmark is code that nothing else compiles. A
+      # benchmark that stopped building is a benchmark nobody will run
+      # again.
+      - name: Build the benchmarks
+        run: cmake --build build --target bench
+
+  # The same thing with the sanitizers on. The wrapper hands raw
+  # pointers and lengths to a library it does not own, so a lifetime it
+  # got wrong is a read of somebody else's memory rather than an
+  # exception, and this is the job that finds it.
+  sanitize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/checkout@v5
+        with:
+          repository: tamnd/zu
+          path: engine
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Build libzu
+        working-directory: engine
+        run: cargo build --release -p zu-capi
+
+      - name: Configure
+        run: >
+          cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DZU_ROOT="$GITHUB_WORKSPACE/engine"
+          -DZU_CPP_SANITIZE=address,undefined
+        env:
+          CC: clang
+          CXX: clang++
+
+      - name: Build
+        run: cmake --build build
+
+      # Leak detection off, because libzu is not instrumented and a
+      # leak reported inside it is a report about the engine's
+      # allocator rather than about this wrapper. The engine has its
+      # own suites for that. What is on here is the part this
+      # repository can be wrong about: bounds, lifetime, and undefined
+      # behaviour on the C++ side of the boundary.
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -j2
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+
+  # The claim the packaging makes is that a project that installed this
+  # can find it. Nothing in the suite can check that, because the suite
+  # is inside the build tree and finds the header by being next to it.
+  # So it is checked here, once, the way a user meets it.
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/checkout@v5
+        with:
+          repository: tamnd/zu
+          path: engine
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Build libzu
+        working-directory: engine
+        run: cargo build --release -p zu-capi
+
+      - name: Install into a prefix
+        run: |
+          set -eu
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+            -DZU_ROOT="$GITHUB_WORKSPACE/engine" \
+            -DZU_CPP_TESTS=OFF -DZU_CPP_EXAMPLES=OFF -DZU_CPP_BENCH=OFF \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/prefix"
+          cmake --build build --target install
+
+      - name: Build a project that found it
+        run: |
+          set -eu
+          cmake -S cmake/consumer -B consumer-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/prefix" \
+            -DZU_ROOT="$GITHUB_WORKSPACE/engine"
+          cmake --build consumer-build
+          ./consumer-build/consumer

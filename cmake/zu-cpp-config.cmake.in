@@ -1,0 +1,22 @@
+@PACKAGE_INIT@
+
+# The wrapper is a header and the engine is not, so a project that finds
+# this has to find that too, and it is found here rather than left to
+# the caller: a target that carries an include directory and no library
+# is a target that links and then does not.
+# ZU_ROOT is what this project documents, and only an upper case
+# <PACKAGE>_ROOT counts as a hint under this policy. Set here as well as
+# in the build, because the project reading this file is somebody else's
+# and has its own policy settings.
+if(POLICY CMP0144)
+  cmake_policy(SET CMP0144 NEW)
+endif()
+
+list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_CURRENT_LIST_DIR}")
+include(CMakeFindDependencyMacro)
+find_dependency(Zu)
+list(REMOVE_AT CMAKE_MODULE_PATH 0)
+
+include("${CMAKE_CURRENT_LIST_DIR}/zu-cpp-targets.cmake")
+
+check_required_components(zu-cpp)

@@ -9,33 +9,43 @@ The C ABI is tier 1 and it is load-bearing. Every other client, Python, Node, Go
 ```c
 #include <zu.h>
 #include <stdio.h>
+#include <string.h>
 
 int main(void) {
-    zu_database *db = NULL;
+    const char *path = "social.zu";
+    const char *q = "MATCH (p:Person) RETURN p.name AS name LIMIT 5";
     zu_conn *conn = NULL;
     zu_result *res = NULL;
     zu_error *err = NULL;
 
-    if (zu_database_open("social.zu1", NULL, &db, &err) != ZU_OK) goto fail;
-    if (zu_connect(db, &conn, &err) != ZU_OK) goto fail;
-    if (zu_query(conn, "MATCH (p:Person) RETURN p.name AS name LIMIT 5", &res, &err) != ZU_OK) goto fail;
+    /* zu_open is a database and one connection on it, which is what a
+       program with one thread wants. Every call takes a pointer and a
+       length, so a host whose strings are not NUL terminated never has
+       to copy one; the _z spellings take a C string when it is. */
+    if (zu_open(path, strlen(path), &conn, &err) != ZU_OK) goto fail;
+    if (zu_query(conn, q, strlen(q), &res, &err) != ZU_OK) goto fail;
 
     for (uint64_t i = 0; i < zu_result_rows(res); i++) {
-        size_t len;
-        const char *name = zu_result_cell_str(res, i, 0, &len);
+        const char *name = NULL;
+        size_t len = 0;
+        if (zu_result_cell_str(res, i, 0, &name, &len) != ZU_OK) continue;
         printf("%.*s\n", (int)len, name);
     }
 
     zu_result_free(res);
     zu_conn_close(conn);
-    zu_database_close(db);
     return 0;
 
-fail:
-    fprintf(stderr, "%s: %s\n", zu_error_code(err), zu_error_message(err));
+fail: {
+    size_t code_len = 0, msg_len = 0;
+    const char *code = zu_error_code(err, &code_len);
+    const char *msg = zu_error_message(err, &msg_len);
+    fprintf(stderr, "%.*s: %.*s\n", (int)code_len, code, (int)msg_len, msg);
     zu_error_free(err);
-    zu_result_free(res); zu_conn_close(conn); zu_database_close(db);
+    zu_result_free(res);
+    zu_conn_close(conn);
     return 1;
+}
 }
 ```
 
@@ -43,21 +53,59 @@ The same thing in C++, where the wrapper does the cleanup:
 
 ```cpp
 #include <zu.hpp>
+#include <iostream>
 
 int main() {
-    auto db = zu::Database::open("social.zu1");
-    auto conn = db.connect();
-    for (auto row : conn.query("MATCH (p:Person) RETURN p.name AS name LIMIT 5"))
-        std::println("{}", row.get<std::string_view>("name"));
+    auto conn = zu::Connection::open("social.zu");
+    auto rows = conn.query("MATCH (p:Person) RETURN p.name AS name LIMIT 5");
+    for (auto row : rows)
+        std::cout << row.get<std::string_view>("name") << '\n';
 }
 ```
 
+`rows` is a named variable rather than a temporary on purpose. A `std::string_view` read out of a result points into the result's own bytes, and a result that died at the end of the statement has nothing left to point into. That is the one rule the zero copy path asks you to keep.
+
 ## What is here
 
-- `examples/`, every example compiles and runs in CI, on every supported platform, under ASan and UBSan.
-- `include/zu.hpp`, the header-only C++20 wrapper. RAII on every handle, exceptions carrying the GQLSTATUS condition, ranges over results, `std::span` over columns. Optional and additive, the C API stays usable on its own.
-- `cmake/`, `vcpkg/`, `conan/`, `pkgconfig/`, find it the way your project already finds things. `find_package(zu)`, `vcpkg install zu`, `conan install zu`, or plain `pkg-config --cflags --libs zu`.
-- `sanitizers/`, ASan, UBSan, TSan, and Valgrind suites over the full ABI surface, including the deliberate misuse cases, because an ABI nine languages depend on should fail loudly rather than corrupt quietly.
+- `include/zu.hpp`, the header-only C++20 wrapper. RAII on every handle, exceptions carrying the GQLSTATUS condition, ranges over results, `std::span` over columns, and a `std::expected` mirror of the whole error model under C++23. Optional and additive, the C API stays usable on its own.
+- `test/`, the suite. Every case is built twice, once at C++23 and once at the C++20 floor, so the standard the header claims to support is the standard it is tested against.
+- `examples/`, one per thing worth knowing. Every example is also a test, because an example that compiles and does not run is documentation that lies.
+- `bench/`, the numbers below, with a timing harness that needs no package manager to run.
+- `cmake/`, `find_package(Zu)` to find the engine and `find_package(zu-cpp)` to find this. vcpkg, Conan and pkg-config packaging come with the first release.
+
+Still to come: ASan, UBSan, TSan and Valgrind suites over the full ABI surface, including the deliberate misuse cases, because an ABI nine languages depend on should fail loudly rather than corrupt quietly.
+
+## Building
+
+The engine is a separate repository and is not built here. Point at a checkout of it, or at an installed SDK, and everything else follows.
+
+```
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DZU_ROOT=/path/to/zu
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+A checkout with no engine beside it still configures and installs the header, and skips the suite, because a header-only library compiles against a header. `cmake --build build --target bench` builds the benchmarks, which ctest does not run: a timing number produced on a machine that is also running a compile is not a number.
+
+The wrapper is header-only, so a project that would rather not use CMake needs the include path and nothing else.
+
+## Numbers
+
+One core of an M-series laptop, release build, a million rows registered as a frame. Rounded, and reproducible with `cmake --build build --target bench && ./build/bench/bench_read`.
+
+| What | Per call | Rows per second |
+|---|---|---|
+| Column read as a `std::span`, summed | 198 us | 5.0 billion |
+| The same sum over a plain `std::vector` | 212 us | 4.7 billion |
+| The same million rows one row at a time | 17.4 ms | 58 million |
+| Registering a frame of a thousand rows | 1.9 us | |
+| Registering a frame of a million rows | 2.2 us | |
+| Scan a million borrowed rows and count | 275 us | 3.6 billion |
+| One small statement, start to finish | 3.4 us | |
+
+Two of those rows are the whole design. A column read as a span is as fast as summing the `std::vector` it was borrowed from, give or take the noise, because it is the same memory and nothing was copied to hand it over. And registering a million rows costs the same as registering a thousand, for the same reason: what crosses the boundary is a pointer and a length.
+
+The row-at-a-time spellings are eighty times slower and they are not a mistake. They go through a bounds check and a type tag per cell, which is what it costs to read a column whose type you do not know until runtime. Reach for them when that is the situation and for the spans when it is not.
 
 ## Specification
 

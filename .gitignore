@@ -1,1 +1,18 @@
 .DS_Store
+
+# Build trees. The name is not fixed, because a project that builds
+# with three compilers wants three of them side by side.
+build/
+build-*/
+cmake-build-*/
+
+# What CMake leaves in a source tree when somebody configures in place.
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+compile_commands.json
+
+# Editors and their indexes.
+.cache/
+.vscode/
+.idea/
