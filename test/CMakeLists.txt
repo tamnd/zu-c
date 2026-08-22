@@ -18,6 +18,21 @@ if(UNIX)
     C_STANDARD_REQUIRED ON
     C_EXTENSIONS OFF)
   add_test(NAME misuse COMMAND misuse)
+
+  # And the rule kept rather than broken, which needs real threads and
+  # is therefore the only file here that starts any. Separate from
+  # misuse.c because the thread sanitizer and the address sanitizer
+  # cannot be linked into one binary, so CI builds this tree twice and
+  # runs a different one of the two each time.
+  find_package(Threads REQUIRED)
+  add_executable(threads threads.c)
+  target_link_libraries(threads PRIVATE zu::zu zu_cpp_build_settings Threads::Threads)
+  target_include_directories(threads PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+  set_target_properties(threads PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED ON
+    C_EXTENSIONS OFF)
+  add_test(NAME threads COMMAND threads)
 endif()
 
 # One executable per file, which is what gives ctest a name per file and

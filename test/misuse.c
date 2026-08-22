@@ -570,22 +570,23 @@ ZT_TEST(a_call_back_into_the_library_from_the_watcher_is_refused_rather_than_rac
    * call made from inside it is a call made from a second thread at a
    * moment when the first is certainly inside the executor. */
   static int64_t ids[3000];
+  const uint64_t rows = zt_rows(3000);
   zu_database *db = NULL;
   zu_conn *conn = NULL;
   zu_frame *frame = NULL;
   zu_result *res = NULL;
   struct reentry state;
-  int i = 0;
+  uint64_t i = 0;
 
-  for (i = 0; i < 3000; i++) {
-    ids[i] = i;
+  for (i = 0; i < rows; i++) {
+    ids[i] = (int64_t)i;
   }
   memset(&state, 0, sizeof state);
 
   ZT_CHECK_EQ(zu_database_memory(NULL, &db, NULL), ZU_OK);
   ZT_CHECK_EQ(zu_connect(db, &conn, NULL), ZU_OK);
-  ZT_CHECK_EQ(zu_frame_new_z("Person", 3000, NULL, NULL, &frame, NULL), ZU_OK);
-  ZT_CHECK_EQ(zu_frame_col_int(frame, "id", 2, ids, 3000, 64, 1, 1, ZU_FRAME_PLAIN, NULL), ZU_OK);
+  ZT_CHECK_EQ(zu_frame_new_z("Person", rows, NULL, NULL, &frame, NULL), ZU_OK);
+  ZT_CHECK_EQ(zu_frame_col_int(frame, "id", 2, ids, rows, 64, 1, 1, ZU_FRAME_PLAIN, NULL), ZU_OK);
   ZT_CHECK_EQ(zu_conn_register(conn, frame, NULL), ZU_OK);
 
   state.conn = conn;

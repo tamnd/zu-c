@@ -107,7 +107,7 @@ lynn
 - `bench/`, the numbers below, with a timing harness that needs no package manager to run.
 - `cmake/`, `find_package(Zu)` to find the engine and `find_package(zu-cpp)` to find this. vcpkg, Conan and pkg-config packaging come with the first release.
 
-Still to come: ASan, UBSan, TSan and Valgrind suites over the full ABI surface, including the deliberate misuse cases, because an ABI nine languages depend on should fail loudly rather than corrupt quietly.
+Four sanitizer jobs run over the suite, because an ABI nine languages depend on should fail loudly rather than corrupt quietly. The whole tree runs under ASan and UBSan; `test/misuse.c` runs again with leak detection on, which it can and the C++ files cannot, because it is the file that gives every handle back by hand; `test/threads.c` runs under TSan; and both C files run under valgrind, which sees what the sanitizers cannot, since libzu is compiled without instrumentation and memcheck does not need any. `test/tsan.supp` records what TSan is unable to be told about a library that takes no pthread lock, and why the reports from inside the engine are dropped rather than read.
 
 ## Building
 
