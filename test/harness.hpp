@@ -99,14 +99,38 @@ std::string show(const T& value) {
 class TempDir {
  public:
   explicit TempDir(std::string_view name) {
+    /* Found by making it rather than by picking a name and clearing
+     * whatever is there. Every file in this suite is built twice, at
+     * C++23 and at the C++20 floor, so under ctest -j two processes run
+     * the same cases at the same time; the counter restarts in each of
+     * them, both ask for zu-cpp-append-6, and the remove_all that used
+     * to start this constructor deleted the other one's database out
+     * from under it halfway through a load. The failures that came back
+     * were "no such file or directory" on a path the case had just
+     * written, which reads like an engine bug and is not one.
+     *
+     * create_directory is one mkdir, so of two processes asking for the
+     * same name at the same moment exactly one is told it made it and
+     * the other moves on to the next number. Nothing here removes a
+     * directory it did not create. */
     static int counter = 0;
-    std::string leaf = "zu-cpp-";
-    leaf += name;
-    leaf += '-';
-    leaf += std::to_string(counter++);
-    path_ = std::filesystem::temp_directory_path() / leaf;
-    std::filesystem::remove_all(path_);
-    std::filesystem::create_directories(path_);
+    const std::filesystem::path root = std::filesystem::temp_directory_path();
+    for (int tries = 0; tries < 4096; ++tries) {
+      std::string leaf = "zu-cpp-";
+      leaf += name;
+      leaf += '-';
+      leaf += std::to_string(counter++);
+      const std::filesystem::path candidate = root / leaf;
+      std::error_code ec;
+      if (std::filesystem::create_directory(candidate, ec) && !ec) {
+        path_ = candidate;
+        return;
+      }
+    }
+    /* Every one of four thousand names taken means a great many runs
+     * died before they could clean up, and going on from here would be
+     * writing into somebody else's directory. */
+    fail(__FILE__, __LINE__, "no free temporary directory under " + root.string());
   }
   ~TempDir() {
     std::error_code ignored;
