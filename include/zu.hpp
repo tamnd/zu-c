@@ -56,6 +56,7 @@
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <iterator>
@@ -71,6 +72,25 @@
 #include <utility>
 #include <variant>
 #include <vector>
+
+/* First, and not in alphabetical order with the rest, because the two
+ * feature tests below read macros that only exist once something has
+ * defined them and <version> is the header whose whole job is defining
+ * them.
+ *
+ * Without it this was reading __cpp_lib_expected before anything had
+ * declared it, so an undefined macro evaluated to nought and
+ * ZU_HAS_EXPECTED came out 0 on GCC 13 at -std=c++23, where
+ * std::expected has been there since GCC 12. Every try_ call in this
+ * header then went undeclared, on a toolchain that has them, and the
+ * suite for that half compiled away to a placeholder rather than
+ * failing, so nothing said so.
+ *
+ * Worse than missing: it depended on include order. A translation unit
+ * that had already included <expected> or <version> before this file
+ * got the try_ half and one that had not did not, which is two
+ * different APIs out of one header in one build. */
+#include <version>
 
 #if __cpp_lib_expected >= 202202L
 #include <expected>
@@ -791,18 +811,18 @@ class Value {
   inline ValueRange elements() const;
 
 #if ZU_HAS_EXPECTED
-  expected<bool> try_as_bool() const { return detail::to_expected(bool_impl()); }
-  expected<std::int64_t> try_as_int() const { return detail::to_expected(int_impl()); }
-  expected<double> try_as_double() const { return detail::to_expected(double_impl()); }
-  expected<std::string_view> try_as_string() const { return detail::to_expected(string_impl()); }
-  expected<std::span<const std::uint8_t>> try_as_bytes() const {
+  [[nodiscard]] expected<bool> try_as_bool() const { return detail::to_expected(bool_impl()); }
+  [[nodiscard]] expected<std::int64_t> try_as_int() const { return detail::to_expected(int_impl()); }
+  [[nodiscard]] expected<double> try_as_double() const { return detail::to_expected(double_impl()); }
+  [[nodiscard]] expected<std::string_view> try_as_string() const { return detail::to_expected(string_impl()); }
+  [[nodiscard]] expected<std::span<const std::uint8_t>> try_as_bytes() const {
     return detail::to_expected(bytes_impl());
   }
-  expected<Temporal> try_as_temporal() const { return detail::to_expected(temporal_impl()); }
-  expected<Node> try_as_node() const { return detail::to_expected(node_impl()); }
-  expected<Rel> try_as_rel() const { return detail::to_expected(rel_impl()); }
-  expected<Value> try_at(std::uint64_t i) const { return detail::to_expected(at_impl(i)); }
-  expected<std::string_view> try_field(std::uint64_t i) const {
+  [[nodiscard]] expected<Temporal> try_as_temporal() const { return detail::to_expected(temporal_impl()); }
+  [[nodiscard]] expected<Node> try_as_node() const { return detail::to_expected(node_impl()); }
+  [[nodiscard]] expected<Rel> try_as_rel() const { return detail::to_expected(rel_impl()); }
+  [[nodiscard]] expected<Value> try_at(std::uint64_t i) const { return detail::to_expected(at_impl(i)); }
+  [[nodiscard]] expected<std::string_view> try_field(std::uint64_t i) const {
     return detail::to_expected(field_impl(i));
   }
 #endif
@@ -1265,53 +1285,53 @@ class Result {
   inline void to_arrow(ArrowArrayStream* out, std::uint64_t rows_per_batch = 0) &&;
 
 #if ZU_HAS_EXPECTED
-  expected<std::string_view> try_name(std::uint32_t col) const {
+  [[nodiscard]] expected<std::string_view> try_name(std::uint32_t col) const {
     return detail::to_expected(name_impl(col));
   }
-  expected<std::uint32_t> try_column(std::string_view name) const {
+  [[nodiscard]] expected<std::uint32_t> try_column(std::string_view name) const {
     return detail::to_expected(column_impl(name));
   }
-  expected<Type> try_type(std::uint64_t row, std::uint32_t col) const {
+  [[nodiscard]] expected<Type> try_type(std::uint64_t row, std::uint32_t col) const {
     return detail::to_expected(type_impl(row, col));
   }
-  expected<std::span<const std::int64_t>> try_ints(std::uint32_t col) const {
+  [[nodiscard]] expected<std::span<const std::int64_t>> try_ints(std::uint32_t col) const {
     return detail::to_expected(ints_impl(col));
   }
-  expected<std::span<const double>> try_doubles(std::uint32_t col) const {
+  [[nodiscard]] expected<std::span<const double>> try_doubles(std::uint32_t col) const {
     return detail::to_expected(doubles_impl(col));
   }
-  expected<std::span<const std::uint64_t>> try_node_offsets(std::uint32_t col) const {
+  [[nodiscard]] expected<std::span<const std::uint64_t>> try_node_offsets(std::uint32_t col) const {
     return detail::to_expected(node_offsets_impl(col));
   }
-  expected<std::span<const std::uint8_t>> try_valid(std::uint32_t col) const {
+  [[nodiscard]] expected<std::span<const std::uint8_t>> try_valid(std::uint32_t col) const {
     return detail::to_expected(valid_impl(col));
   }
-  expected<std::string_view> try_str(std::uint64_t row, std::uint32_t col) const {
+  [[nodiscard]] expected<std::string_view> try_str(std::uint64_t row, std::uint32_t col) const {
     return detail::to_expected(str_impl(row, col));
   }
-  expected<Value> try_cell(std::uint64_t row, std::uint32_t col) const {
+  [[nodiscard]] expected<Value> try_cell(std::uint64_t row, std::uint32_t col) const {
     return detail::to_expected(cell_impl(row, col));
   }
-  expected<ChunkExtent> try_chunk(std::uint64_t i) const {
+  [[nodiscard]] expected<ChunkExtent> try_chunk(std::uint64_t i) const {
     return detail::to_expected(chunk_impl(i));
   }
-  expected<std::span<const std::int64_t>> try_chunk_ints(std::uint64_t chunk,
+  [[nodiscard]] expected<std::span<const std::int64_t>> try_chunk_ints(std::uint64_t chunk,
                                                          std::uint32_t col) const {
     return detail::to_expected(chunk_ints_impl(chunk, col));
   }
-  expected<std::span<const double>> try_chunk_doubles(std::uint64_t chunk,
+  [[nodiscard]] expected<std::span<const double>> try_chunk_doubles(std::uint64_t chunk,
                                                       std::uint32_t col) const {
     return detail::to_expected(chunk_doubles_impl(chunk, col));
   }
-  expected<std::span<const std::uint64_t>> try_chunk_node_offsets(std::uint64_t chunk,
+  [[nodiscard]] expected<std::span<const std::uint64_t>> try_chunk_node_offsets(std::uint64_t chunk,
                                                                   std::uint32_t col) const {
     return detail::to_expected(chunk_node_offsets_impl(chunk, col));
   }
-  expected<std::span<const std::uint8_t>> try_chunk_valid(std::uint64_t chunk,
+  [[nodiscard]] expected<std::span<const std::uint8_t>> try_chunk_valid(std::uint64_t chunk,
                                                           std::uint32_t col) const {
     return detail::to_expected(chunk_valid_impl(chunk, col));
   }
-  inline expected<void> try_to_arrow(Connection& conn, ArrowArrayStream* out,
+  [[nodiscard]] inline expected<void> try_to_arrow(Connection& conn, ArrowArrayStream* out,
                                      std::uint64_t rows_per_batch = 0) &&;
 #endif
 
@@ -1582,25 +1602,25 @@ class Statement {
   Result execute() { return detail::unwrap(execute_impl()); }
 
 #if ZU_HAS_EXPECTED
-  expected<void> try_bind(std::string_view name, std::int64_t v) {
+  [[nodiscard]] expected<void> try_bind(std::string_view name, std::int64_t v) {
     return detail::to_expected_void(bind_int_impl(name, v));
   }
-  expected<void> try_bind(std::string_view name, double v) {
+  [[nodiscard]] expected<void> try_bind(std::string_view name, double v) {
     return detail::to_expected_void(bind_double_impl(name, v));
   }
-  expected<void> try_bind(std::string_view name, bool v) {
+  [[nodiscard]] expected<void> try_bind(std::string_view name, bool v) {
     return detail::to_expected_void(bind_bool_impl(name, v));
   }
-  expected<void> try_bind(std::string_view name, std::string_view v) {
+  [[nodiscard]] expected<void> try_bind(std::string_view name, std::string_view v) {
     return detail::to_expected_void(bind_str_impl(name, v));
   }
-  expected<void> try_bind(std::string_view name, Temporal v) {
+  [[nodiscard]] expected<void> try_bind(std::string_view name, Temporal v) {
     return detail::to_expected_void(bind_temporal_impl(name, v));
   }
-  expected<void> try_bind_null(std::string_view name) {
+  [[nodiscard]] expected<void> try_bind_null(std::string_view name) {
     return detail::to_expected_void(bind_null_impl(name));
   }
-  expected<Result> try_execute() { return detail::to_expected(execute_impl()); }
+  [[nodiscard]] expected<Result> try_execute() { return detail::to_expected(execute_impl()); }
 #endif
 
  private:
@@ -1748,25 +1768,25 @@ class Appender {
   std::uint64_t close() { return detail::unwrap(close_impl()); }
 
 #if ZU_HAS_EXPECTED
-  expected<void> try_append(bool v) { return detail::to_expected_void(append_bool_impl(v)); }
-  expected<void> try_append(std::int64_t v) { return detail::to_expected_void(append_int_impl(v)); }
-  expected<void> try_append(double v) { return detail::to_expected_void(append_double_impl(v)); }
-  expected<void> try_append(std::string_view v) {
+  [[nodiscard]] expected<void> try_append(bool v) { return detail::to_expected_void(append_bool_impl(v)); }
+  [[nodiscard]] expected<void> try_append(std::int64_t v) { return detail::to_expected_void(append_int_impl(v)); }
+  [[nodiscard]] expected<void> try_append(double v) { return detail::to_expected_void(append_double_impl(v)); }
+  [[nodiscard]] expected<void> try_append(std::string_view v) {
     return detail::to_expected_void(append_str_impl(v));
   }
-  expected<void> try_append(std::span<const std::uint8_t> v) {
+  [[nodiscard]] expected<void> try_append(std::span<const std::uint8_t> v) {
     return detail::to_expected_void(append_bytes_impl(v));
   }
-  expected<void> try_append(Temporal v) {
+  [[nodiscard]] expected<void> try_append(Temporal v) {
     return detail::to_expected_void(append_temporal_impl(v));
   }
-  expected<std::string_view> try_col_name(std::uint32_t col) const {
+  [[nodiscard]] expected<std::string_view> try_col_name(std::uint32_t col) const {
     return detail::to_expected(col_name_impl(col));
   }
-  expected<void> try_end_row() { return detail::to_expected_void(end_row_impl()); }
-  expected<void> try_flush() { return detail::to_expected_void(flush_impl()); }
-  expected<std::uint64_t> try_discard() { return detail::to_expected(discard_impl()); }
-  expected<std::uint64_t> try_close() { return detail::to_expected(close_impl()); }
+  [[nodiscard]] expected<void> try_end_row() { return detail::to_expected_void(end_row_impl()); }
+  [[nodiscard]] expected<void> try_flush() { return detail::to_expected_void(flush_impl()); }
+  [[nodiscard]] expected<std::uint64_t> try_discard() { return detail::to_expected(discard_impl()); }
+  [[nodiscard]] expected<std::uint64_t> try_close() { return detail::to_expected(close_impl()); }
 #endif
 
  private:
@@ -1889,7 +1909,7 @@ class Loader {
 
   /* Fails if the path exists, which is what a bulk load is: it builds a
    * database rather than adding to one. */
-  static Loader create(std::string_view path) { return detail::unwrap(create_impl(path)); }
+  [[nodiscard]] static Loader create(std::string_view path) { return detail::unwrap(create_impl(path)); }
 
   zu_loader* raw() const noexcept { return h_.get(); }
   explicit operator bool() const noexcept { return static_cast<bool>(h_); }
@@ -1948,33 +1968,33 @@ class Loader {
   void finish() { detail::unwrap_void(finish_impl()); }
 
 #if ZU_HAS_EXPECTED
-  static expected<Loader> try_create(std::string_view path) {
+  [[nodiscard]] static expected<Loader> try_create(std::string_view path) {
     return detail::to_expected(create_impl(path));
   }
-  expected<void> try_table(std::string_view nodes, std::string_view edges, std::uint64_t rows) {
+  [[nodiscard]] expected<void> try_table(std::string_view nodes, std::string_view edges, std::uint64_t rows) {
     return detail::to_expected_void(table_impl(nodes, edges, rows));
   }
-  expected<void> try_edges(std::span<const std::uint32_t> from, std::span<const std::uint32_t> to) {
+  [[nodiscard]] expected<void> try_edges(std::span<const std::uint32_t> from, std::span<const std::uint32_t> to) {
     return detail::to_expected_void(edges_impl(from, to));
   }
-  expected<void> try_ints(std::string_view name, std::span<const std::int64_t> values) {
+  [[nodiscard]] expected<void> try_ints(std::string_view name, std::span<const std::int64_t> values) {
     return detail::to_expected_void(col_ints_impl(name, values));
   }
-  expected<void> try_doubles(std::string_view name, std::span<const double> values) {
+  [[nodiscard]] expected<void> try_doubles(std::string_view name, std::span<const double> values) {
     return detail::to_expected_void(col_doubles_impl(name, values));
   }
-  expected<void> try_bools(std::string_view name, std::span<const std::int32_t> values) {
+  [[nodiscard]] expected<void> try_bools(std::string_view name, std::span<const std::int32_t> values) {
     return detail::to_expected_void(col_bools_impl(name, values));
   }
   template <detail::StringRange R>
-  expected<void> try_strings(std::string_view name, const R& values) {
+  [[nodiscard]] expected<void> try_strings(std::string_view name, const R& values) {
     return detail::to_expected_void(col_strs_impl(name, detail::to_views(values)));
   }
-  expected<void> try_temporals(std::string_view name, TemporalKind kind,
+  [[nodiscard]] expected<void> try_temporals(std::string_view name, TemporalKind kind,
                                std::span<const std::int64_t> values) {
     return detail::to_expected_void(col_temporal_impl(name, kind, values));
   }
-  expected<void> try_finish() { return detail::to_expected_void(finish_impl()); }
+  [[nodiscard]] expected<void> try_finish() { return detail::to_expected_void(finish_impl()); }
 #endif
 
  private:
@@ -2103,20 +2123,20 @@ class Frame {
   explicit Frame(zu_frame* f) noexcept : h_(f) {}
 
   /* A frame over buffers the caller keeps alive itself. */
-  static Frame create(std::string_view name, std::uint64_t rows) {
+  [[nodiscard]] static Frame create(std::string_view name, std::uint64_t rows) {
     return detail::unwrap(create_impl(name, rows, {}));
   }
   /* A frame that says when the engine has finished with it. The
    * callback runs once, on a thread of the library's, and is where a
    * host that has to take a lock to let go of what it passed takes
    * it. */
-  static Frame create(std::string_view name, std::uint64_t rows, std::function<void()> release) {
+  [[nodiscard]] static Frame create(std::string_view name, std::uint64_t rows, std::function<void()> release) {
     return detail::unwrap(create_impl(name, rows, std::move(release)));
   }
   /* The same, keeping something alive rather than running something: a
    * shared_ptr to whatever owns the buffers, dropped when the engine is
    * done. */
-  static Frame create(std::string_view name, std::uint64_t rows, std::shared_ptr<void> keepalive) {
+  [[nodiscard]] static Frame create(std::string_view name, std::uint64_t rows, std::shared_ptr<void> keepalive) {
     return create(name, rows, [held = std::move(keepalive)]() mutable { held.reset(); });
   }
 
@@ -2174,20 +2194,20 @@ class Frame {
   }
 
 #if ZU_HAS_EXPECTED
-  static expected<Frame> try_create(std::string_view name, std::uint64_t rows,
+  [[nodiscard]] static expected<Frame> try_create(std::string_view name, std::uint64_t rows,
                                     std::function<void()> release = {}) {
     return detail::to_expected(create_impl(name, rows, std::move(release)));
   }
   template <detail::NumericRange R>
-  expected<void> try_column(std::string_view name, const R& values, std::int64_t scale = 1,
+  [[nodiscard]] expected<void> try_column(std::string_view name, const R& values, std::int64_t scale = 1,
                             TemporalKind temporal = TemporalKind::plain) {
     return detail::to_expected_void(numeric_impl(name, values, scale, temporal));
   }
-  expected<void> try_bools(std::string_view name, std::span<const std::uint8_t> bitmap,
+  [[nodiscard]] expected<void> try_bools(std::string_view name, std::span<const std::uint8_t> bitmap,
                            std::uint64_t count) {
     return detail::to_expected_void(col_bool_impl(name, bitmap.data(), count));
   }
-  expected<void> try_strings(std::string_view name, std::span<const std::int32_t> offsets,
+  [[nodiscard]] expected<void> try_strings(std::string_view name, std::span<const std::int32_t> offsets,
                              std::span<const char> data) {
     return detail::to_expected_void(col_str_impl(name, offsets.data(), 0, data.data(), data.size(),
                                                  offsets.empty() ? 0 : offsets.size() - 1));
@@ -2341,7 +2361,7 @@ class Config {
   }
 
 #if ZU_HAS_EXPECTED
-  expected<void> try_set(std::string_view key, std::string_view value) {
+  [[nodiscard]] expected<void> try_set(std::string_view key, std::string_view value) {
     return detail::to_expected_void(set_impl(key, value));
   }
 #endif
@@ -2375,18 +2395,18 @@ class Database {
   Database() = default;
   explicit Database(zu_database* db) noexcept : h_(db) {}
 
-  static Database open(std::string_view path, const Config& cfg = Config{}) {
+  [[nodiscard]] static Database open(std::string_view path, const Config& cfg = Config{}) {
     return detail::unwrap(open_impl(path, cfg));
   }
   /* The path must not exist. A create that opened what it found there
    * would be the call that quietly writes into somebody else's data. */
-  static Database create(std::string_view path, const Config& cfg = Config{}) {
+  [[nodiscard]] static Database create(std::string_view path, const Config& cfg = Config{}) {
     return detail::unwrap(create_impl(path, cfg));
   }
   /* A database that never touches the filesystem. Every call makes one
    * of its own: two connections on one handle are two views of one
    * graph, and two handles share nothing. */
-  static Database memory(const Config& cfg = Config{}) { return detail::unwrap(memory_impl(cfg)); }
+  [[nodiscard]] static Database memory(const Config& cfg = Config{}) { return detail::unwrap(memory_impl(cfg)); }
 
   zu_database* raw() const noexcept { return h_.get(); }
   explicit operator bool() const noexcept { return static_cast<bool>(h_); }
@@ -2401,17 +2421,17 @@ class Database {
   inline Connection connect() const;
 
 #if ZU_HAS_EXPECTED
-  static expected<Database> try_open(std::string_view path, const Config& cfg = Config{}) {
+  [[nodiscard]] static expected<Database> try_open(std::string_view path, const Config& cfg = Config{}) {
     return detail::to_expected(open_impl(path, cfg));
   }
-  static expected<Database> try_create(std::string_view path, const Config& cfg = Config{}) {
+  [[nodiscard]] static expected<Database> try_create(std::string_view path, const Config& cfg = Config{}) {
     return detail::to_expected(create_impl(path, cfg));
   }
-  static expected<Database> try_memory(const Config& cfg = Config{}) {
+  [[nodiscard]] static expected<Database> try_memory(const Config& cfg = Config{}) {
     return detail::to_expected(memory_impl(cfg));
   }
-  expected<std::string_view> try_path() const { return detail::to_expected(path_impl()); }
-  inline expected<Connection> try_connect() const;
+  [[nodiscard]] expected<std::string_view> try_path() const { return detail::to_expected(path_impl()); }
+  [[nodiscard]] inline expected<Connection> try_connect() const;
 #endif
 
  private:
@@ -2485,9 +2505,9 @@ class Connection {
 
   /* One database with the default configuration, one connection on it,
    * and nothing else to keep track of. */
-  static Connection open(std::string_view path) { return detail::unwrap(open_impl(path)); }
-  static Connection create(std::string_view path) { return detail::unwrap(create_impl(path)); }
-  static Connection memory() { return detail::unwrap(memory_impl()); }
+  [[nodiscard]] static Connection open(std::string_view path) { return detail::unwrap(open_impl(path)); }
+  [[nodiscard]] static Connection create(std::string_view path) { return detail::unwrap(create_impl(path)); }
+  [[nodiscard]] static Connection memory() { return detail::unwrap(memory_impl()); }
 
   zu_conn* raw() const noexcept { return h_.get(); }
   explicit operator bool() const noexcept { return static_cast<bool>(h_); }
@@ -2589,41 +2609,41 @@ class Connection {
   }
 
 #if ZU_HAS_EXPECTED
-  static expected<Connection> try_open(std::string_view path) {
+  [[nodiscard]] static expected<Connection> try_open(std::string_view path) {
     return detail::to_expected(open_impl(path));
   }
-  static expected<Connection> try_create(std::string_view path) {
+  [[nodiscard]] static expected<Connection> try_create(std::string_view path) {
     return detail::to_expected(create_impl(path));
   }
-  static expected<Connection> try_memory() { return detail::to_expected(memory_impl()); }
-  expected<Connection> try_duplicate() { return detail::to_expected(duplicate_impl()); }
-  expected<Result> try_query(std::string_view q) { return detail::to_expected(query_impl(q)); }
-  expected<Statement> try_prepare(std::string_view q) {
+  [[nodiscard]] static expected<Connection> try_memory() { return detail::to_expected(memory_impl()); }
+  [[nodiscard]] expected<Connection> try_duplicate() { return detail::to_expected(duplicate_impl()); }
+  [[nodiscard]] expected<Result> try_query(std::string_view q) { return detail::to_expected(query_impl(q)); }
+  [[nodiscard]] expected<Statement> try_prepare(std::string_view q) {
     return detail::to_expected(prepare_impl(q));
   }
-  expected<void> try_interrupt() { return detail::to_expected_void(interrupt_impl()); }
-  expected<std::uint64_t> try_rows_read() const { return detail::to_expected(rows_read_impl()); }
-  expected<void> try_on_progress(std::chrono::milliseconds every, Progress watcher) {
+  [[nodiscard]] expected<void> try_interrupt() { return detail::to_expected_void(interrupt_impl()); }
+  [[nodiscard]] expected<std::uint64_t> try_rows_read() const { return detail::to_expected(rows_read_impl()); }
+  [[nodiscard]] expected<void> try_on_progress(std::chrono::milliseconds every, Progress watcher) {
     return detail::to_expected_void(set_progress_impl(every, std::move(watcher)));
   }
   [[nodiscard]] inline expected<Transaction> try_transaction(bool read_only = false);
-  expected<void> try_begin(bool read_only = false) {
+  [[nodiscard]] expected<void> try_begin(bool read_only = false) {
     return detail::to_expected_void(begin_impl(read_only));
   }
-  expected<void> try_commit() { return detail::to_expected_void(commit_impl()); }
-  expected<void> try_rollback() { return detail::to_expected_void(rollback_impl()); }
-  expected<bool> try_in_transaction() const { return detail::to_expected(in_transaction_impl()); }
-  expected<Appender> try_appender(std::string_view table) {
+  [[nodiscard]] expected<void> try_commit() { return detail::to_expected_void(commit_impl()); }
+  [[nodiscard]] expected<void> try_rollback() { return detail::to_expected_void(rollback_impl()); }
+  [[nodiscard]] expected<bool> try_in_transaction() const { return detail::to_expected(in_transaction_impl()); }
+  [[nodiscard]] expected<Appender> try_appender(std::string_view table) {
     return detail::to_expected(appender_impl(table));
   }
-  expected<void> try_register_frame(Frame& f) { return detail::to_expected_void(register_impl(f)); }
-  expected<bool> try_unregister_frame(std::string_view name) {
+  [[nodiscard]] expected<void> try_register_frame(Frame& f) { return detail::to_expected_void(register_impl(f)); }
+  [[nodiscard]] expected<bool> try_unregister_frame(std::string_view name) {
     return detail::to_expected(unregister_impl(name));
   }
-  expected<std::vector<std::string>> try_registered() const {
+  [[nodiscard]] expected<std::vector<std::string>> try_registered() const {
     return detail::to_expected(registered_impl());
   }
-  expected<std::optional<std::string>> try_table_name(std::uint32_t table) const {
+  [[nodiscard]] expected<std::optional<std::string>> try_table_name(std::uint32_t table) const {
     return detail::to_expected(table_name_impl(table));
   }
 #endif
@@ -2961,6 +2981,260 @@ inline expected<void> Result::try_to_arrow(Connection& conn, ArrowArrayStream* o
 }
 #endif
 
+/* ---- printing ----
+ *
+ * All of this is for a person to read: a log line, a test failure, a
+ * debugger watch. A program that wants the bits calls the accessor.
+ *
+ * to_string is the whole of it, and the std::formatter specializations
+ * below are one line each over it. That way the C++20 floor gets the
+ * same text as C++23 without needing <format> to be there, and the two
+ * spellings cannot come to disagree about what a value looks like, for
+ * the same reason the throwing and try_ halves are one line over one
+ * implementation.
+ *
+ * The enums answer a view of a string literal, which costs nothing and
+ * needs no allocation to print a status in a hot path. The rest build a
+ * string, because there is nothing to point at otherwise.
+ *
+ * Every one of these is an overload of a single name rather than
+ * to_string_status and to_string_node, so a generic caller writes
+ * to_string(x) and argument dependent lookup finds it. */
+
+inline std::string_view to_string(Status s) noexcept {
+  switch (s) {
+    case Status::ok: return "ok";
+    case Status::done: return "done";
+    case Status::error: return "error";
+    case Status::misuse: return "misuse";
+    case Status::misuse_concurrent: return "misuse_concurrent";
+    case Status::misuse_closed: return "misuse_closed";
+    case Status::interrupted: return "interrupted";
+    case Status::conflict: return "conflict";
+    case Status::corrupt: return "corrupt";
+    case Status::unsupported: return "unsupported";
+    case Status::io: return "io";
+  }
+  /* Not unreachable. The ABI numbers these and a library built from a
+   * later zu.h than this header can hand back one it has never heard
+   * of, which should print as a mystery rather than fall off the end of
+   * the function. */
+  return "unknown";
+}
+
+inline std::string_view to_string(Severity s) noexcept {
+  switch (s) {
+    case Severity::success: return "success";
+    case Severity::no_data: return "no_data";
+    case Severity::warning: return "warning";
+    case Severity::informational: return "informational";
+    case Severity::exception: return "exception";
+  }
+  return "unknown";
+}
+
+/* The names the API model uses, not the C++ spellings. A column of
+ * whole numbers is an INT everywhere else a reader will meet it, and a
+ * printer that called it `integer` because that is what the enumerator
+ * had to be named would be teaching a vocabulary nothing else speaks. */
+inline std::string_view to_string(Type t) noexcept {
+  switch (t) {
+    case Type::null: return "null";
+    case Type::boolean: return "bool";
+    case Type::integer: return "int";
+    case Type::floating: return "float";
+    case Type::string: return "str";
+    case Type::node: return "node";
+    case Type::rel: return "rel";
+    case Type::list: return "list";
+    case Type::path: return "path";
+    case Type::temporal: return "temporal";
+    case Type::record: return "record";
+    case Type::graph: return "graph";
+    case Type::binding_table: return "binding_table";
+    case Type::bytes: return "bytes";
+  }
+  return "unknown";
+}
+
+inline std::string_view to_string(TemporalKind k) noexcept {
+  switch (k) {
+    case TemporalKind::date: return "date";
+    case TemporalKind::local_time: return "local_time";
+    case TemporalKind::zoned_time: return "zoned_time";
+    case TemporalKind::local_datetime: return "local_datetime";
+    case TemporalKind::zoned_datetime: return "zoned_datetime";
+    case TemporalKind::duration_year_month: return "duration_year_month";
+    case TemporalKind::duration_day_time: return "duration_day_time";
+    case TemporalKind::plain: return "plain";
+  }
+  return "unknown";
+}
+
+namespace detail {
+
+/* A double as a person reads it.
+ *
+ * Fifteen significant digits rather than the seventeen that round-trip
+ * every double exactly, because this is the printing section: 0.1
+ * should print as 0.1 and not as 0.10000000000000001, and a caller who
+ * needs the bits back has as_double and is not scraping them out of a
+ * log line.
+ *
+ * snprintf rather than std::to_chars, which is the better tool and is
+ * C++17. The floating point half of to_chars landed in the standard
+ * libraries years after the integer half, and this header promises to
+ * compile at the C++20 floor rather than on the subset of C++20
+ * toolchains that happen to have shipped it. */
+inline std::string printed(double d) {
+  char buf[32];
+  const int n = std::snprintf(buf, sizeof buf, "%.15g", d);
+  if (n <= 0) {
+    return "nan";
+  }
+  const auto len = static_cast<std::size_t>(n);
+  return std::string(buf, len < sizeof buf ? len : sizeof buf - 1);
+}
+
+}  // namespace detail
+
+inline std::string to_string(Position p) {
+  /* Line and column, and not the offset. The offset is for a tool that
+   * is going to index into the statement; a person reading a failure
+   * wants the two numbers their editor shows them. */
+  return "line " + std::to_string(p.line) + ", column " + std::to_string(p.column);
+}
+
+inline std::string to_string(Node n) {
+  return "node " + std::to_string(n.table) + ":" + std::to_string(n.offset);
+}
+
+inline std::string to_string(Rel r) {
+  return "rel " + std::to_string(r.table) + ":" + std::to_string(r.src) + "->" +
+         std::to_string(r.dst);
+}
+
+inline std::string to_string(Temporal t) {
+  /* The kind first, because the count means nothing without it: 19000
+   * is a date in 2022 and a duration of nineteen microseconds, and the
+   * only thing that tells them apart is the word in front. */
+  std::string out(to_string(t.kind));
+  out += ' ';
+  out += std::to_string(t.count);
+  if (t.offset != 0) {
+    out += t.offset > 0 ? " +" : " ";
+    out += std::to_string(t.offset);
+  }
+  return out;
+}
+
+/* A failure on one line, which is what a log wants. Error::report is
+ * the other spelling, three lines with a caret under the column, for
+ * the program that is showing somebody a statement to fix.
+ *
+ * The code and the place go in front of the message, because that is
+ * the order a reader wants them in: what class of thing went wrong,
+ * where, and then what the engine had to say about it. A condition with
+ * neither prints as the message alone rather than as an empty prefix
+ * and a colon. */
+inline std::string to_string(const Error& e) {
+  std::string out;
+  if (const auto code = e.code(); code.has_value()) {
+    out += *code;
+  }
+  if (const auto at = e.position(); at.has_value()) {
+    if (!out.empty()) {
+      out += ' ';
+    }
+    out += "at " + to_string(*at);
+  }
+  if (!out.empty()) {
+    out += ": ";
+  }
+  out += e.message();
+  return out;
+}
+
+/* A cell on one line.
+ *
+ * Dispatched on the type the value says it is rather than on a call
+ * that could refuse, so printing a cell is not a thing that throws
+ * where the printing is the last thing left working.
+ *
+ * The shapes a scalar cannot hold print as what they are and how many
+ * they hold. A list printed elementwise is a different function and a
+ * recursive one, and the caller who wants it has elements() and a range
+ * that composes with std::views. */
+inline std::string to_string(const Value& v) {
+  if (v.raw() == nullptr) {
+    return "<none>";
+  }
+  switch (v.type()) {
+    case Type::null: return "null";
+    case Type::boolean: return v.as_bool() ? "true" : "false";
+    case Type::integer: return std::to_string(v.as_int());
+    case Type::floating: return detail::printed(v.as_double());
+    case Type::string: return std::string(v.as_string());
+    case Type::node: return to_string(v.as_node());
+    case Type::rel: return to_string(v.as_rel());
+    case Type::temporal: return to_string(v.as_temporal());
+    case Type::bytes: return std::to_string(v.as_bytes().size()) + " bytes";
+    default: break;
+  }
+  return std::string(to_string(v.type())) + " of " + std::to_string(v.size());
+}
+
 }  // namespace zu
+
+#if ZU_HAS_FORMAT
+/* std::format over the same text.
+ *
+ * Each of these inherits formatter<string_view>, so the whole standard
+ * format spec arrives with it and none of it had to be written here:
+ * {:>20} pads a status the way it pads any other string, and a bad spec
+ * is rejected at compile time by the base class rather than accepted
+ * and ignored.
+ *
+ * <format> was already included at the top of this header and
+ * ZU_HAS_FORMAT was already defined, and nothing used either, which is
+ * a header claiming a capability it did not have.
+ *
+ * No operator<< to go with it, on purpose. <ostream> is one of the
+ * heaviest headers in the standard library and it would land in every
+ * translation unit that includes this one whether it prints or not, for
+ * a wrapper whose first line is that it includes zu.h and calls nothing
+ * else. A caller who wants a stream writes
+ *
+ *   os << zu::to_string(e);
+ *
+ * which is one call, no dependency, and the same bytes.
+ *
+ * The text goes in a named local first. to_string answers a std::string
+ * for most of these, and a view of a temporary is a view of nothing
+ * once the full expression it was built in has ended. */
+#define ZU_FORMATTER(TYPE)                                                    \
+  template <>                                                                 \
+  struct std::formatter<TYPE> : std::formatter<std::string_view> {            \
+    template <class Context>                                                  \
+    auto format(const TYPE& v, Context& ctx) const {                          \
+      const auto text = zu::to_string(v);                                     \
+      return std::formatter<std::string_view>::format(std::string_view(text), \
+                                                      ctx);                   \
+    }                                                                         \
+  }
+
+ZU_FORMATTER(zu::Status);
+ZU_FORMATTER(zu::Severity);
+ZU_FORMATTER(zu::Type);
+ZU_FORMATTER(zu::TemporalKind);
+ZU_FORMATTER(zu::Position);
+ZU_FORMATTER(zu::Node);
+ZU_FORMATTER(zu::Rel);
+ZU_FORMATTER(zu::Temporal);
+ZU_FORMATTER(zu::Error);
+ZU_FORMATTER(zu::Value);
+
+#undef ZU_FORMATTER
+#endif
 
 #endif /* ZU_HPP */

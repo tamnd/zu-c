@@ -174,6 +174,28 @@ ZU_TEST(a_frame_registers_without_throwing) {
 
 #else
 
+/* A file that compiles to nothing is a file that passes for the wrong
+ * reason, and this one did.
+ *
+ * zu.hpp used to read __cpp_lib_expected before <version> had defined
+ * it, so ZU_HAS_EXPECTED came out 0 on GCC 13 at -std=c++23 and every
+ * case above compiled away. What ran instead was one placeholder that
+ * queries a number, ctest wrote "Passed", and twelve cases about the
+ * half of the API a caller who builds without exceptions depends on
+ * had not been compiled anywhere for months.
+ *
+ * So the floor build says so out loud. Below C++23 there is nothing to
+ * run here and the throwing half is complete on its own; at C++23 and
+ * above, this half not being there is a broken build rather than a
+ * quiet one, and the compiler is the only thing positioned to notice.
+ *
+ * MSVC without /Zc:__cplusplus reports 199711L, which skips the check
+ * rather than firing it, and a gate that is off is better than a gate
+ * that is wrong. */
+#if __cplusplus > 202002L
+#error "C++23 or later and no std::expected: zu.hpp turned the try_ half off. Check that <version> is included before the feature tests in zu.hpp rather than deleting this line."
+#endif
+
 ZU_TEST(this_toolchain_has_no_std_expected_and_the_throwing_half_is_enough) {
   auto conn = zu::Connection::memory();
   CHECK_EQ(conn.query("RETURN 1 AS one").rows(), 1u);

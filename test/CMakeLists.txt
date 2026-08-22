@@ -54,7 +54,8 @@ set(ZU_CPP_TEST_FILES
   test_frame.cpp
   test_progress.cpp
   test_expected.cpp
-  test_arrow.cpp)
+  test_arrow.cpp
+  test_idiom.cpp)
 
 foreach(file IN LISTS ZU_CPP_TEST_FILES)
   cmake_path(GET file STEM name)
