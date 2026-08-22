@@ -139,6 +139,23 @@ jobs:
           ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
 
+      # And the C misuse suite once more with leak detection on, which
+      # the rest of the suite cannot have. The reason it can is that it
+      # is the one file here that gives everything back by hand: no
+      # destructor runs on its behalf, so a handle it failed to close is
+      # a leak it is responsible for rather than one the wrapper hid.
+      #
+      # This is what makes "no leak" in the misuse item a checked thing
+      # rather than a claim. LSan counts every malloc it sees, including
+      # the ones inside libzu, which is uninstrumented but not invisible,
+      # so a connection or a result the suite dropped is caught here even
+      # though the allocation happened on the other side of the ABI.
+      - name: The misuse suite gives everything back
+        run: ./build/test/misuse
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+
   # The claim the packaging makes is that a project that installed this
   # can find it. Nothing in the suite can check that, because the suite
   # is inside the build tree and finds the header by being next to it.
