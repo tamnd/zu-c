@@ -12,17 +12,32 @@ The C ABI is tier 1 and it is load-bearing. Every other client, Python, Node, Go
 #include <string.h>
 
 int main(void) {
-    const char *path = "social.zu";
-    const char *q = "MATCH (p:Person) RETURN p.name AS name LIMIT 5";
+    const char *path = "social.zu1";
+    const char *people[] = {
+        "INSERT (p:Person {id: 1, name: 'ada'})",
+        "INSERT (p:Person {id: 2, name: 'grace'})",
+        "INSERT (p:Person {id: 3, name: 'lynn'})",
+    };
+    const char *q = "MATCH (p:Person) RETURN p.name AS name ORDER BY p.id";
     zu_conn *conn = NULL;
     zu_result *res = NULL;
     zu_error *err = NULL;
 
-    /* zu_open is a database and one connection on it, which is what a
-       program with one thread wants. Every call takes a pointer and a
-       length, so a host whose strings are not NUL terminated never has
-       to copy one; the _z spellings take a C string when it is. */
-    if (zu_open(path, strlen(path), &conn, &err) != ZU_OK) goto fail;
+    /* zu_create is a database and one connection on it, which is what a
+       program with one thread wants. zu_open is the call for a database
+       that is already there, and they are two calls rather than one flag
+       so that a deployment pointed at the wrong path is told about it
+       instead of quietly starting from empty. Every call takes a pointer
+       and a length, so a host whose strings are not NUL terminated never
+       has to copy one; the _z spellings take a C string when it is. */
+    if (zu_create(path, strlen(path), &conn, &err) != ZU_OK) goto fail;
+
+    for (size_t i = 0; i < sizeof people / sizeof people[0]; i++) {
+        if (zu_query(conn, people[i], strlen(people[i]), &res, &err) != ZU_OK) goto fail;
+        zu_result_free(res);
+        res = NULL;
+    }
+
     if (zu_query(conn, q, strlen(q), &res, &err) != ZU_OK) goto fail;
 
     for (uint64_t i = 0; i < zu_result_rows(res); i++) {
@@ -49,6 +64,14 @@ fail: {
 }
 ```
 
+```
+ada
+grace
+lynn
+```
+
+That output is not a promise, it is a test. Both programs on this page are compiled and run by this repository's suite exactly as printed, and what they print is diffed against the block under them, because a first example is the most read and least executed code a client has and it goes wrong quietly, a rename at a time. Both write `social.zu1` in the directory you run them from, and running one twice fails on the second go: `zu_create` refuses a path that is already there.
+
 The same thing in C++, where the wrapper does the cleanup:
 
 ```cpp
@@ -56,11 +79,21 @@ The same thing in C++, where the wrapper does the cleanup:
 #include <iostream>
 
 int main() {
-    auto conn = zu::Connection::open("social.zu");
-    auto rows = conn.query("MATCH (p:Person) RETURN p.name AS name LIMIT 5");
+    auto conn = zu::Connection::create("social.zu1");
+    conn.query("INSERT (p:Person {id: 1, name: 'ada'})");
+    conn.query("INSERT (p:Person {id: 2, name: 'grace'})");
+    conn.query("INSERT (p:Person {id: 3, name: 'lynn'})");
+
+    auto rows = conn.query("MATCH (p:Person) RETURN p.name AS name ORDER BY p.id");
     for (auto row : rows)
         std::cout << row.get<std::string_view>("name") << '\n';
 }
+```
+
+```
+ada
+grace
+lynn
 ```
 
 `rows` is a named variable rather than a temporary on purpose. A `std::string_view` read out of a result points into the result's own bytes, and a result that died at the end of the statement has nothing left to point into. That is the one rule the zero copy path asks you to keep.
@@ -70,6 +103,7 @@ int main() {
 - `include/zu.hpp`, the header-only C++20 wrapper. RAII on every handle, exceptions carrying the GQLSTATUS condition, ranges over results, `std::span` over columns, and a `std::expected` mirror of the whole error model under C++23. Optional and additive, the C API stays usable on its own.
 - `test/`, the suite. Every case is built twice, once at C++23 and once at the C++20 floor, so the standard the header claims to support is the standard it is tested against.
 - `examples/`, one per thing worth knowing. Every example is also a test, because an example that compiles and does not run is documentation that lies.
+- `readme/`, which lifts the two programs above off this page, builds them, runs them and diffs what they print against the blocks under them. The page is the code most people read and the code least often run, and it is the only code here that had nothing compiling it.
 - `bench/`, the numbers below, with a timing harness that needs no package manager to run.
 - `cmake/`, `find_package(Zu)` to find the engine and `find_package(zu-cpp)` to find this. vcpkg, Conan and pkg-config packaging come with the first release.
 
