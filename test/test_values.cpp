@@ -6,6 +6,10 @@
 #include <zu.hpp>
 
 #include <chrono>
+#include <cstdint>
+#include <iterator>
+#include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -72,6 +76,51 @@ ZU_TEST(a_record_has_names_as_well_as_values) {
   CHECK_EQ(rec[1].as_string(), "x");
 }
 
+ZU_TEST(a_byte_string_comes_back_as_the_octets_it_is) {
+  auto conn = zu::Connection::memory();
+  auto r = conn.query("RETURN X'00AB' AS b");
+  CHECK_EQ(r.type(0, 0), zu::Type::bytes);
+
+  const std::span<const std::uint8_t> b = r.cell(0, 0).as_bytes();
+  CHECK_EQ(b.size(), 2u);
+  /* The leading zero is the point. Read as text this value ends before
+   * it starts, which is why the engine has a second type for it and why
+   * this reads as a span of octets rather than as a string. */
+  CHECK_EQ(static_cast<int>(b[0]), 0);
+  CHECK_EQ(static_cast<int>(b[1]), 0xAB);
+
+  const auto same = r.row(0).get<std::span<const std::uint8_t>>(0);
+  CHECK_EQ(same.size(), 2u);
+  CHECK_EQ(same.data(), b.data());
+
+  /* The copying spelling, for a caller who wants the octets to outlive
+   * the result they came out of. */
+  const auto owned = r.row(0).get<std::vector<std::uint8_t>>(0);
+  CHECK_EQ(owned.size(), 2u);
+  CHECK_EQ(static_cast<int>(owned[1]), 0xAB);
+}
+
+ZU_TEST(an_empty_byte_string_is_a_byte_string_and_not_a_null) {
+  auto conn = zu::Connection::memory();
+  auto r = conn.query("RETURN X'' AS b");
+  CHECK_EQ(r.type(0, 0), zu::Type::bytes);
+  CHECK(!r.cell(0, 0).is_null());
+  const auto b = r.cell(0, 0).as_bytes();
+  CHECK(b.empty());
+  /* Empty and iterable, rather than empty and undefined to walk. */
+  CHECK_EQ(std::distance(b.begin(), b.end()), 0);
+}
+
+ZU_TEST(octets_and_text_are_not_read_as_one_another) {
+  auto conn = zu::Connection::memory();
+  auto r = conn.query("RETURN X'00AB' AS b, 'ada' AS s");
+  /* A blob that happened to be valid UTF-8 would read as text and one
+   * that did not would be a silent mess, so neither direction is
+   * allowed and a caller who guessed wrong is told. */
+  CHECK_THROWS_AS(zu::Exception, r.cell(0, 0).as_string());
+  CHECK_THROWS_AS(zu::Exception, r.cell(0, 1).as_bytes());
+}
+
 ZU_TEST(a_node_is_a_table_and_a_row) {
   zt::TempDir dir("node");
   const std::string path = dir.file("people.zu");
@@ -90,6 +139,29 @@ ZU_TEST(a_node_is_a_table_and_a_row) {
    * not. */
   CHECK_EQ(r.cell(2, 0).as_node().table, n.table);
   CHECK_NE(r.cell(2, 0).as_node().offset, n.offset);
+}
+
+ZU_TEST(a_table_id_says_what_it_is_called) {
+  zt::TempDir dir("tablename");
+  const std::string path = dir.file("people.zu");
+  zt::people(path);
+
+  auto conn = zu::Connection::open(path);
+  auto r = conn.query("MATCH (p:Person) RETURN p ORDER BY p.id");
+  const zu::Node n = r.cell(0, 0).as_node();
+
+  const std::optional<std::string> name = conn.table_name(n.table);
+  CHECK(name.has_value());
+  CHECK_EQ(*name, std::string("Person"));
+
+  /* Nothing rather than a failure, because an id no table has is an
+   * answer to the question and not a broken call. */
+  CHECK(!conn.table_name(9999).has_value());
+
+  /* A copy, so asking again does not move the first answer out from
+   * under it. The pointer the ABI hands back would have. */
+  const std::optional<std::string> again = conn.table_name(n.table);
+  CHECK_EQ(*name, *again);
 }
 
 ZU_TEST(a_node_column_reads_as_a_span_of_offsets) {

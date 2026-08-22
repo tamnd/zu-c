@@ -110,7 +110,11 @@ ZU_TEST(a_cell_read_as_the_wrong_type_says_so) {
 
 ZU_TEST(an_integer_that_does_not_fit_is_refused_rather_than_wrapped) {
   auto conn = zu::Connection::memory();
-  auto r = conn.query("RETURN 100000 AS big");
+  /* The accent quotes are not decoration. big became a reserved word,
+   * and a reserved word written plainly after AS is a syntax error, so
+   * quoting is what keeps a name a name whatever the grammar does with
+   * it later. The column is still called big. */
+  auto r = conn.query("RETURN 100000 AS `big`");
   CHECK_EQ(r.row(0).get<std::int64_t>(0), 100000);
   /* A silently truncated 100000 is the bug this exists to not have.
    * The type was the caller's to choose, so choosing one the value does
@@ -131,6 +135,10 @@ ZU_TEST(a_closed_handle_is_a_misuse_and_not_a_crash) {
   CHECK(!static_cast<bool>(conn));
   CHECK(static_cast<bool>(other));
   CHECK_THROWS_AS(zu::Exception, conn.query("RETURN 1 AS v"));
+  /* table_name is the one call on a connection the ABI gives no status
+   * for, so it is the one that would have read the null handle itself
+   * rather than been told about it. */
+  CHECK_THROWS_AS(zu::Exception, conn.table_name(0));
 }
 
 ZU_TEST(every_exception_is_a_runtime_error) {

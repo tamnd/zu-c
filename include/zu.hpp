@@ -132,6 +132,10 @@ enum class Type : int {
   record = ZU_TYPE_RECORD,
   graph = ZU_TYPE_GRAPH,
   binding_table = ZU_TYPE_BINDING_TABLE,
+  /* Octets rather than text, so nothing here is validated as UTF-8 and
+   * nothing is decoded on the way out. Last in the list because the
+   * order is the ABI's numbering and this is what ABI 0.14 added. */
+  bytes = ZU_TYPE_BYTES,
 };
 
 /* Which temporal a temporal is. The unit follows the kind: days for a
@@ -737,6 +741,12 @@ class Value {
   /* Points into the result's bytes and is NOT NUL-terminated, which is
    * the price of not copying. */
   std::string_view as_string() const { return detail::unwrap(string_impl()); }
+  /* Octets, on the same terms: into the result, not copied, and not
+   * NUL-terminated. A byte string and a string are different types here
+   * and reading one as the other fails, because a blob that happens to
+   * be valid UTF-8 is still a blob and a caller who wanted text should
+   * be told the column is not text. */
+  std::span<const std::uint8_t> as_bytes() const { return detail::unwrap(bytes_impl()); }
   Temporal as_temporal() const { return detail::unwrap(temporal_impl()); }
   Node as_node() const { return detail::unwrap(node_impl()); }
   Rel as_rel() const { return detail::unwrap(rel_impl()); }
@@ -760,6 +770,9 @@ class Value {
   expected<std::int64_t> try_as_int() const { return detail::to_expected(int_impl()); }
   expected<double> try_as_double() const { return detail::to_expected(double_impl()); }
   expected<std::string_view> try_as_string() const { return detail::to_expected(string_impl()); }
+  expected<std::span<const std::uint8_t>> try_as_bytes() const {
+    return detail::to_expected(bytes_impl());
+  }
   expected<Temporal> try_as_temporal() const { return detail::to_expected(temporal_impl()); }
   expected<Node> try_as_node() const { return detail::to_expected(node_impl()); }
   expected<Rel> try_as_rel() const { return detail::to_expected(rel_impl()); }
@@ -798,6 +811,20 @@ class Value {
       return std::move(*e);
     }
     return std::string_view(p == nullptr ? "" : p, len);
+  }
+  detail::Outcome<std::span<const std::uint8_t>> bytes_impl() const {
+    const std::uint8_t* p = nullptr;
+    std::size_t len = 0;
+    if (auto e = detail::checked(zu_value_bytes(v_, &p, &len), "zu_value_bytes")) {
+      return std::move(*e);
+    }
+    /* An empty byte string is a length of zero and a pointer that may be
+     * anything, and a span built on a null pointer is one nobody can
+     * safely iterate even when it is empty. */
+    if (p == nullptr || len == 0) {
+      return std::span<const std::uint8_t>{};
+    }
+    return std::span<const std::uint8_t>(p, len);
   }
   detail::Outcome<Temporal> temporal_impl() const {
     std::int32_t kind = 0;
@@ -1435,6 +1462,11 @@ T Row::get(std::uint32_t col) const {
     return result_->str(row_, col);
   } else if constexpr (std::is_same_v<T, std::string>) {
     return std::string(result_->str(row_, col));
+  } else if constexpr (std::is_same_v<T, std::span<const std::uint8_t>>) {
+    return result_->cell(row_, col).as_bytes();
+  } else if constexpr (std::is_same_v<T, std::vector<std::uint8_t>>) {
+    const auto v = result_->cell(row_, col).as_bytes();
+    return std::vector<std::uint8_t>(v.begin(), v.end());
   } else if constexpr (std::is_same_v<T, bool>) {
     return result_->cell(row_, col).as_bool();
   } else if constexpr (std::is_same_v<T, Temporal>) {
@@ -2513,6 +2545,24 @@ class Connection {
    * call and a vector of views into them would be a trap. */
   std::vector<std::string> registered() const { return detail::unwrap(registered_impl()); }
 
+  /* What the table id in a node or a rel is called, and nothing when no
+   * table has that id. A node is a table and an offset and nothing else,
+   * which is what makes it cheap, so this is the call that turns one
+   * back into something a person reads.
+   *
+   * Nothing rather than a failure, because an id no table has is an
+   * answer to the question. Node and rel tables share one id space, so
+   * an id read off a rel and an id read off a node are asked for the
+   * same way.
+   *
+   * A copy, unlike the strings that come off a result. The pointer the
+   * ABI hands back is good only until the next one of these on the same
+   * connection, and a view with that lifetime is a dangling read one
+   * line later rather than a saving. */
+  std::optional<std::string> table_name(std::uint32_t table) const {
+    return detail::unwrap(table_name_impl(table));
+  }
+
 #if ZU_HAS_EXPECTED
   static expected<Connection> try_open(std::string_view path) {
     return detail::to_expected(open_impl(path));
@@ -2547,6 +2597,9 @@ class Connection {
   }
   expected<std::vector<std::string>> try_registered() const {
     return detail::to_expected(registered_impl());
+  }
+  expected<std::optional<std::string>> try_table_name(std::uint32_t table) const {
+    return detail::to_expected(table_name_impl(table));
   }
 #endif
 
@@ -2740,6 +2793,20 @@ class Connection {
       out.emplace_back(p, len);
     }
     return out;
+  }
+  detail::Outcome<std::optional<std::string>> table_name_impl(std::uint32_t table) const {
+    /* The only call on a connection with no status to return, so the
+     * closed handle it would otherwise read as a null pointer is caught
+     * here rather than by the engine. */
+    if (!h_) {
+      return Error::take(Status::misuse, nullptr, "zu_conn_table_name");
+    }
+    std::size_t len = 0;
+    const char* p = zu_conn_table_name(h_.get(), table, &len);
+    if (p == nullptr) {
+      return std::optional<std::string>{};
+    }
+    return std::optional<std::string>(std::in_place, p, len);
   }
 
   detail::Handle<zu_conn, zu_conn_close> h_;
