@@ -28,11 +28,11 @@
  */
 #include <zu.h>
 
+#include <poll.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "harness.h"
 
@@ -381,13 +381,23 @@ struct interrupter {
   zu_status status;
 };
 
+/* Waiting on nothing for a while, which is the sleep that needs no
+ * feature test macro. usleep was withdrawn from POSIX in 2008 and glibc
+ * hides it from a file compiled at -std=c11; nanosleep is there but its
+ * declaration is behind __USE_POSIX199309, so reaching it means
+ * defining _POSIX_C_SOURCE at the top of the file, which changes what
+ * every other header here declares and does so differently on macOS
+ * than on glibc. poll is declared by poll.h on both without asking for
+ * anything, and a poll of no descriptors is a timer. */
+static void sleep_ms(int ms) { poll(NULL, 0, ms); }
+
 static void *interrupt_soon(void *arg) {
   struct interrupter *state = (struct interrupter *)arg;
   /* Long enough that the statement is certainly running, short enough
    * that it is certainly not finished. The statement below takes about
    * a third of a second uninstrumented and longer under a sanitizer,
    * which is the direction it is safe to be wrong in. */
-  usleep(50 * 1000);
+  sleep_ms(50);
   state->status = zu_conn_interrupt(state->conn);
   return NULL;
 }
@@ -404,23 +414,24 @@ ZT_TEST(an_interrupt_from_another_thread_stops_the_statement_and_not_the_connect
    * the connection has to run the next statement normally, which is
    * what the header says makes this different from closing it. */
   static int64_t many[3000];
+  const uint64_t rows = zt_rows(3000);
   zu_database *db = NULL;
   zu_conn *conn = NULL;
   zu_frame *frame = NULL;
   zu_result *res = NULL;
   struct interrupter state;
   pthread_t other;
-  int i;
+  uint64_t i;
 
-  for (i = 0; i < 3000; i++) {
-    many[i] = i;
+  for (i = 0; i < rows; i++) {
+    many[i] = (int64_t)i;
   }
   memset(&state, 0, sizeof state);
 
   ZT_CHECK_EQ(zu_database_memory(NULL, &db, NULL), ZU_OK);
   ZT_CHECK_EQ(zu_connect(db, &conn, NULL), ZU_OK);
-  ZT_CHECK_EQ(zu_frame_new_z("Person", 3000, NULL, NULL, &frame, NULL), ZU_OK);
-  ZT_CHECK_EQ(zu_frame_col_int(frame, "id", 2, many, 3000, 64, 1, 1, ZU_FRAME_PLAIN, NULL), ZU_OK);
+  ZT_CHECK_EQ(zu_frame_new_z("Person", rows, NULL, NULL, &frame, NULL), ZU_OK);
+  ZT_CHECK_EQ(zu_frame_col_int(frame, "id", 2, many, rows, 64, 1, 1, ZU_FRAME_PLAIN, NULL), ZU_OK);
   ZT_CHECK_EQ(zu_conn_register(conn, frame, NULL), ZU_OK);
 
   state.conn = conn;
@@ -429,8 +440,9 @@ ZT_TEST(an_interrupt_from_another_thread_stops_the_statement_and_not_the_connect
     ZT_FAIL("could not start the interrupting thread");
   }
 
-  /* Four and a half million pairs, which is long enough to be stopped
-   * in the middle of. */
+  /* Every pair of people with a predicate over them, which the planner
+   * cannot fold into a count, so it runs long enough to be stopped in
+   * the middle of. */
   ZT_CHECK_EQ(
       zu_query_z(conn, "MATCH (a:Person), (b:Person) WHERE a.id < b.id RETURN count(*)", &res, NULL),
       ZU_INTERRUPTED);

@@ -156,6 +156,121 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
 
+  # Races, which are the failure the address sanitizer cannot see and
+  # the one an ABI used from four threads is most likely to have.
+  #
+  # gcc rather than clang, because the suppression file below was
+  # measured against gcc's libtsan and a suppression nobody checked is
+  # worse than no suppression at all.
+  tsan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/checkout@v5
+        with:
+          repository: tamnd/zu
+          path: engine
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Build libzu
+        working-directory: engine
+        run: cargo build --release -p zu-capi
+
+      - name: Configure
+        run: >
+          cmake -B build-tsan -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DZU_ROOT="$GITHUB_WORKSPACE/engine"
+          -DZU_CPP_SANITIZE=thread
+        env:
+          CC: gcc
+          CXX: g++
+
+      - name: Build the threading suite
+        run: cmake --build build-tsan --target threads
+
+      # Only the threading suite, because it is the only file here that
+      # starts a thread. The rest of the tree under TSan would be a
+      # slower way of compiling code that never races.
+      #
+      # The suppression file says at length why the engine's own frames
+      # are dropped: libzu takes no pthread lock, so TSan has no edge to
+      # learn from and reports two threads as racing even when one of
+      # them plainly waited. What is left is this repository's half,
+      # and it is checked rather than assumed: a race planted in the
+      # suite's own memory is still reported with these suppressions on.
+      - name: The threading rule holds when it is kept
+        run: ./build-tsan/test/threads
+        env:
+          TSAN_OPTIONS: suppressions=${{ github.workspace }}/test/tsan.supp:halt_on_error=1
+
+  # And memcheck, which sees what the sanitizers do not: an
+  # uninstrumented library's own reads and writes. libzu is compiled by
+  # cargo without instrumentation, so ASan knows nothing about what it
+  # does between the malloc and the free that it intercepts, and
+  # valgrind knows all of it.
+  valgrind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/checkout@v5
+        with:
+          repository: tamnd/zu
+          path: engine
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Install valgrind
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+
+      - name: Build libzu
+        working-directory: engine
+        run: cargo build --release -p zu-capi
+
+      - name: Configure
+        run: >
+          cmake -B build-vg -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DZU_ROOT="$GITHUB_WORKSPACE/engine"
+
+      - name: Build the C suites
+        run: cmake --build build-vg --target misuse threads
+
+      # The two C files, because they are the ones that hand raw
+      # pointers across and give everything back by hand.
+      #
+      # Definitely and indirectly lost are errors. Possibly lost is not:
+      # it is one block of 180 bytes, it belongs to a thread the library
+      # started, and a pointer into the middle of a block is how a
+      # thread-local arena looks to a leak checker rather than how a
+      # leak looks.
+      #
+      # ZU_TEST_ROWS shrinks the two fixtures that exist to be slow.
+      # Memcheck already runs the machine forty times slower, which is
+      # another way of getting a statement that lasts long enough to be
+      # interrupted, so the smaller number tests the same thing in a
+      # fifth of the wall clock.
+      - name: The C suites under memcheck
+        run: |
+          set -eu
+          for t in misuse threads; do
+            valgrind --error-exitcode=99 --leak-check=full \
+              --show-leak-kinds=definite,indirect \
+              --errors-for-leak-kinds=definite,indirect \
+              --track-origins=yes "./build-vg/test/$t"
+          done
+        env:
+          ZU_TEST_ROWS: 300
+
   # The claim the packaging makes is that a project that installed this
   # can find it. Nothing in the suite can check that, because the suite
   # is inside the build tree and finds the header by being next to it.

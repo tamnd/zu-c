@@ -1,0 +1,35 @@
+# What the thread sanitizer cannot be told about libzu.
+#
+# TSan works out what happened before what by watching synchronization,
+# and the way it watches an uninstrumented library is by intercepting
+# the pthread calls it makes. libzu makes none. The measurement:
+#
+#   $ nm -D libzu.so | grep -E 'U (pthread_mutex|pthread_rwlock|pthread_cond)'
+#   $ nm -D libzu.so | grep -E 'U (syscall|futex)'
+#                    U syscall@GLIBC_2.2.5
+#
+# Not one pthread primitive, and one syscall, which is the futex Rust's
+# own locks take directly rather than through libc. So every lock the
+# engine holds is invisible, every happens-before edge it establishes is
+# lost, and any two threads that touch the same byte look to TSan like
+# two threads racing on it even when one of them plainly waited.
+#
+# That is not a guess. Eight threads on eight separate databases,
+# sharing nothing whatever, still report one:
+#
+#   Write of size 8 by thread T4:  #0 free   #1 libzu.so+0x1f3e00
+#   Previous write of size 8 by T1: #0 malloc #1 libzu.so+0x1f7167
+#
+# which is an allocator handing one thread a block another gave back.
+# If a report can be raised by two threads that share nothing, a report
+# raised by two threads that share a database says nothing either.
+#
+# So the reports are suppressed rather than read, and what the job
+# checks is the half of the boundary this repository owns: that the
+# suite's own threading is sound, that a connection handed between
+# threads is handed with a real edge, and that the library is not being
+# entered from two threads at once by accident. A race inside the engine
+# is the engine's to find, with an instrumented build of its own, which
+# is tamnd/zu#622.
+called_from_lib:libzu.so
+race:libzu.so
