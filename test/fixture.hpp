@@ -13,11 +13,21 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace zt {
+
+/* Bytes at a path, for the cases that want a file the engine will
+ * refuse. Written here rather than borrowed from the machine, because a
+ * case that reads a path outside its own directory is a case that fails
+ * on somebody else's box. */
+inline void write_file(const std::string& path, std::string_view contents) {
+  std::ofstream out(path, std::ios::binary | std::ios::trunc);
+  out.write(contents.data(), static_cast<std::streamsize>(contents.size()));
+}
 
 /* A date as the count of days the engine keeps one in, worked out by
  * <chrono> rather than written down, because a number nobody can read
