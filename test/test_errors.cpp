@@ -49,6 +49,37 @@ ZU_TEST(an_error_names_where_in_the_statement_it_was) {
   }
 }
 
+ZU_TEST(a_failure_carries_what_the_engine_said_and_not_only_that_it_failed) {
+  /* The one above lets the position be missing, because a variable that
+   * is not defined has no token to point at. This one does not: a
+   * statement that failed to parse has a place, a code and a sentence,
+   * and if any of the three is missing then the failure was thrown away
+   * somewhere between the engine and here.
+   *
+   * Which is a thing that happened. checked() used to take the error
+   * slot by value, beside the call that fills it, and a compiler is
+   * free to evaluate those two arguments in either order. On the one
+   * that read the slot first, every failure in this library arrived
+   * empty: right status, no code, no position, and the name of the C
+   * function as the message. Everything still threw, so nothing looked
+   * broken from a distance. */
+  auto conn = zu::Connection::memory();
+  try {
+    conn.query("MATCH (p:Person RETURN p");
+    zt::fail(__FILE__, __LINE__, "a statement that does not parse answered");
+  } catch (const zu::Exception& e) {
+    const zu::Error& err = e.error();
+    CHECK(err.code().has_value());
+    CHECK_EQ(err.code()->size(), 5u);
+    CHECK(err.position().has_value());
+    CHECK(err.position()->line >= 1);
+    /* Not the name of the call, which is what is left when there is no
+     * engine error to read. */
+    CHECK(err.message() != std::string_view("zu_query"));
+    CHECK_EQ(err.severity(), zu::Severity::exception);
+  }
+}
+
 ZU_TEST(an_error_that_is_not_ours_still_has_something_to_say) {
   /* No engine error behind it, so the message is the wrapper's own and
    * the status is the one it was made with. */

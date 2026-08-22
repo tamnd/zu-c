@@ -634,8 +634,27 @@ class Handle {
 
 /* The two shapes a fallible call comes in. A call with an error handle
  * has something to say about why; a call without one is structural and
- * the status names it exactly, so the call's own name is the message. */
-inline std::optional<Error> checked(zu_status st, zu_error* err, std::string_view what) {
+ * the status names it exactly, so the call's own name is the message.
+ *
+ * The error slot is passed by its address rather than by its value, and
+ * that is not a style. Every one of these reads
+ *
+ *   checked(zu_something(..., &err), &err, "zu_something")
+ *
+ * and the order in which a compiler evaluates those two arguments is
+ * unspecified: it may read err before it makes the call that sets it.
+ * Passing the value that way loses every failure the engine explained,
+ * on whichever compiler chose that order, and leaves a status with no
+ * code, no message and no position behind it, which looks from the
+ * outside exactly like an engine that said nothing. Taking the address
+ * cannot go wrong in either order, because what is read early is where
+ * err lives rather than what it holds, and it is read here after the
+ * call has certainly returned. */
+inline std::optional<Error> checked(zu_status st, zu_error** slot, std::string_view what) {
+  zu_error* err = slot == nullptr ? nullptr : *slot;
+  if (slot != nullptr) {
+    *slot = nullptr;
+  }
   if (st == ZU_OK || st == ZU_DONE) {
     if (err != nullptr) {
       zu_error_free(err);
@@ -1575,7 +1594,7 @@ class Statement {
   detail::Outcome<Result> execute_impl() {
     zu_result* out = nullptr;
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_execute(h_.get(), &out, &err), err, "zu_execute")) {
+    if (auto e = detail::checked(zu_execute(h_.get(), &out, &err), &err, "zu_execute")) {
       return std::move(*e);
     }
     return Result(out);
@@ -1696,28 +1715,29 @@ class Appender {
  private:
   detail::Outcome<detail::Nothing> append_bool_impl(bool v) {
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_append_bool(h_.get(), v ? 1 : 0, &err), err, "zu_append_bool")) {
+    if (auto e = detail::checked(zu_append_bool(h_.get(), v ? 1 : 0, &err), &err,
+                                 "zu_append_bool")) {
       return std::move(*e);
     }
     return detail::Nothing{};
   }
   detail::Outcome<detail::Nothing> append_int_impl(std::int64_t v) {
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_append_i64(h_.get(), v, &err), err, "zu_append_i64")) {
+    if (auto e = detail::checked(zu_append_i64(h_.get(), v, &err), &err, "zu_append_i64")) {
       return std::move(*e);
     }
     return detail::Nothing{};
   }
   detail::Outcome<detail::Nothing> append_double_impl(double v) {
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_append_f64(h_.get(), v, &err), err, "zu_append_f64")) {
+    if (auto e = detail::checked(zu_append_f64(h_.get(), v, &err), &err, "zu_append_f64")) {
       return std::move(*e);
     }
     return detail::Nothing{};
   }
   detail::Outcome<detail::Nothing> append_str_impl(std::string_view v) {
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_append_str(h_.get(), v.data(), v.size(), &err), err,
+    if (auto e = detail::checked(zu_append_str(h_.get(), v.data(), v.size(), &err), &err,
                                  "zu_append_str")) {
       return std::move(*e);
     }
@@ -1725,7 +1745,7 @@ class Appender {
   }
   detail::Outcome<detail::Nothing> append_bytes_impl(std::span<const std::uint8_t> v) {
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_append_bytes(h_.get(), v.data(), v.size(), &err), err,
+    if (auto e = detail::checked(zu_append_bytes(h_.get(), v.data(), v.size(), &err), &err,
                                  "zu_append_bytes")) {
       return std::move(*e);
     }
@@ -1734,7 +1754,7 @@ class Appender {
   detail::Outcome<detail::Nothing> append_temporal_impl(Temporal v) {
     zu_error* err = nullptr;
     if (auto e = detail::checked(
-            zu_append_temporal(h_.get(), static_cast<std::int32_t>(v.kind), v.count, &err), err,
+            zu_append_temporal(h_.get(), static_cast<std::int32_t>(v.kind), v.count, &err), &err,
             "zu_append_temporal")) {
       return std::move(*e);
     }
@@ -1742,14 +1762,14 @@ class Appender {
   }
   detail::Outcome<detail::Nothing> end_row_impl() {
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_append_end_row(h_.get(), &err), err, "zu_append_end_row")) {
+    if (auto e = detail::checked(zu_append_end_row(h_.get(), &err), &err, "zu_append_end_row")) {
       return std::move(*e);
     }
     return detail::Nothing{};
   }
   detail::Outcome<detail::Nothing> flush_impl() {
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_appender_flush(h_.get(), &err), err, "zu_appender_flush")) {
+    if (auto e = detail::checked(zu_appender_flush(h_.get(), &err), &err, "zu_appender_flush")) {
       return std::move(*e);
     }
     return detail::Nothing{};
@@ -1786,7 +1806,7 @@ class Appender {
   detail::Outcome<std::uint64_t> close_impl() {
     std::uint64_t out = 0;
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_appender_close(h_.get(), &out, &err), err,
+    if (auto e = detail::checked(zu_appender_close(h_.get(), &out, &err), &err,
                                  "zu_appender_close")) {
       return std::move(*e);
     }
@@ -1904,7 +1924,7 @@ class Loader {
   static detail::Outcome<Loader> create_impl(std::string_view path) {
     zu_loader* out = nullptr;
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_loader_create(path.data(), path.size(), &out, &err), err,
+    if (auto e = detail::checked(zu_loader_create(path.data(), path.size(), &out, &err), &err,
                                  "zu_loader_create")) {
       return std::move(*e);
     }
@@ -1915,7 +1935,7 @@ class Loader {
     zu_error* err = nullptr;
     if (auto e = detail::checked(zu_loader_table(h_.get(), nodes.data(), nodes.size(), edges.data(),
                                                  edges.size(), rows, &err),
-                                 err, "zu_loader_table")) {
+                                 &err, "zu_loader_table")) {
       return std::move(*e);
     }
     return detail::Nothing{};
@@ -1929,7 +1949,7 @@ class Loader {
     }
     zu_error* err = nullptr;
     if (auto e = detail::checked(
-            zu_loader_edges(h_.get(), from.data(), to.data(), from.size(), &err), err,
+            zu_loader_edges(h_.get(), from.data(), to.data(), from.size(), &err), &err,
             "zu_loader_edges")) {
       return std::move(*e);
     }
@@ -1940,7 +1960,7 @@ class Loader {
     zu_error* err = nullptr;
     if (auto e = detail::checked(zu_loader_col_i64(h_.get(), name.data(), name.size(),
                                                    values.data(), values.size(), &err),
-                                 err, "zu_loader_col_i64")) {
+                                 &err, "zu_loader_col_i64")) {
       return std::move(*e);
     }
     return detail::Nothing{};
@@ -1950,7 +1970,7 @@ class Loader {
     zu_error* err = nullptr;
     if (auto e = detail::checked(zu_loader_col_f64(h_.get(), name.data(), name.size(),
                                                    values.data(), values.size(), &err),
-                                 err, "zu_loader_col_f64")) {
+                                 &err, "zu_loader_col_f64")) {
       return std::move(*e);
     }
     return detail::Nothing{};
@@ -1960,7 +1980,7 @@ class Loader {
     zu_error* err = nullptr;
     if (auto e = detail::checked(zu_loader_col_bool(h_.get(), name.data(), name.size(),
                                                     values.data(), values.size(), &err),
-                                 err, "zu_loader_col_bool")) {
+                                 &err, "zu_loader_col_bool")) {
       return std::move(*e);
     }
     return detail::Nothing{};
@@ -1980,7 +2000,7 @@ class Loader {
     zu_error* err = nullptr;
     if (auto e = detail::checked(zu_loader_col_str(h_.get(), name.data(), name.size(), ptrs.data(),
                                                    lens.data(), values.size(), &err),
-                                 err, "zu_loader_col_str")) {
+                                 &err, "zu_loader_col_str")) {
       return std::move(*e);
     }
     return detail::Nothing{};
@@ -1992,14 +2012,14 @@ class Loader {
             zu_loader_col_temporal(h_.get(), name.data(), name.size(),
                                    static_cast<std::int32_t>(kind), values.data(), values.size(),
                                    &err),
-            err, "zu_loader_col_temporal")) {
+            &err, "zu_loader_col_temporal")) {
       return std::move(*e);
     }
     return detail::Nothing{};
   }
   detail::Outcome<detail::Nothing> finish_impl() {
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_loader_finish(h_.get(), &err), err, "zu_loader_finish")) {
+    if (auto e = detail::checked(zu_loader_finish(h_.get(), &err), &err, "zu_loader_finish")) {
       return std::move(*e);
     }
     return detail::Nothing{};
@@ -2163,7 +2183,7 @@ class Frame {
     const zu_status st =
         zu_frame_new(name.data(), name.size(), rows, owner.get(),
                      owner ? &Frame::release_trampoline : nullptr, &out, &err);
-    if (auto e = detail::checked(st, err, "zu_frame_new")) {
+    if (auto e = detail::checked(st, &err, "zu_frame_new")) {
       /* The callback never runs for a frame that was never made, so
        * what was allocated for it is freed here rather than leaked. */
       return std::move(*e);
@@ -2180,7 +2200,7 @@ class Frame {
     if (auto e = detail::checked(
             zu_frame_col_int(h_.get(), name.data(), name.size(), values, count, bits, is_signed,
                              scale, static_cast<std::int32_t>(temporal), &err),
-            err, "zu_frame_col_int")) {
+            &err, "zu_frame_col_int")) {
       return std::move(*e);
     }
     return detail::Nothing{};
@@ -2189,7 +2209,7 @@ class Frame {
                                                   std::uint64_t count, std::int32_t bits) {
     zu_error* err = nullptr;
     if (auto e = detail::checked(
-            zu_frame_col_float(h_.get(), name.data(), name.size(), values, count, bits, &err), err,
+            zu_frame_col_float(h_.get(), name.data(), name.size(), values, count, bits, &err), &err,
             "zu_frame_col_float")) {
       return std::move(*e);
     }
@@ -2199,7 +2219,7 @@ class Frame {
                                                  std::uint64_t count) {
     zu_error* err = nullptr;
     if (auto e = detail::checked(
-            zu_frame_col_bool(h_.get(), name.data(), name.size(), bitmap, count, &err), err,
+            zu_frame_col_bool(h_.get(), name.data(), name.size(), bitmap, count, &err), &err,
             "zu_frame_col_bool")) {
       return std::move(*e);
     }
@@ -2211,7 +2231,7 @@ class Frame {
     zu_error* err = nullptr;
     if (auto e = detail::checked(zu_frame_col_str(h_.get(), name.data(), name.size(), offsets, wide,
                                                   data, data_len, count, &err),
-                                 err, "zu_frame_col_str")) {
+                                 &err, "zu_frame_col_str")) {
       return std::move(*e);
     }
     return detail::Nothing{};
@@ -2222,7 +2242,7 @@ class Frame {
     zu_error* err = nullptr;
     if (auto e = detail::checked(zu_frame_col_view(h_.get(), name.data(), name.size(), views, data,
                                                    lens, buffers, count, &err),
-                                 err, "zu_frame_col_view")) {
+                                 &err, "zu_frame_col_view")) {
       return std::move(*e);
     }
     return detail::Nothing{};
@@ -2275,7 +2295,7 @@ class Config {
   detail::Outcome<detail::Nothing> set_impl(std::string_view key, std::string_view value) {
     zu_error* err = nullptr;
     if (auto e = detail::checked(
-            zu_config_set(&c_, key.data(), key.size(), value.data(), value.size(), &err), err,
+            zu_config_set(&c_, key.data(), key.size(), value.data(), value.size(), &err), &err,
             "zu_config_set")) {
       return std::move(*e);
     }
@@ -2344,7 +2364,7 @@ class Database {
     zu_database* out = nullptr;
     zu_error* err = nullptr;
     if (auto e = detail::checked(
-            zu_database_open(path.data(), path.size(), cfg.raw(), &out, &err), err,
+            zu_database_open(path.data(), path.size(), cfg.raw(), &out, &err), &err,
             "zu_database_open")) {
       return std::move(*e);
     }
@@ -2354,7 +2374,7 @@ class Database {
     zu_database* out = nullptr;
     zu_error* err = nullptr;
     if (auto e = detail::checked(
-            zu_database_create(path.data(), path.size(), cfg.raw(), &out, &err), err,
+            zu_database_create(path.data(), path.size(), cfg.raw(), &out, &err), &err,
             "zu_database_create")) {
       return std::move(*e);
     }
@@ -2363,7 +2383,7 @@ class Database {
   static detail::Outcome<Database> memory_impl(const Config& cfg) {
     zu_database* out = nullptr;
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_database_memory(cfg.raw(), &out, &err), err,
+    if (auto e = detail::checked(zu_database_memory(cfg.raw(), &out, &err), &err,
                                  "zu_database_memory")) {
       return std::move(*e);
     }
@@ -2565,7 +2585,7 @@ class Connection {
   static detail::Outcome<Connection> open_impl(std::string_view path) {
     zu_conn* out = nullptr;
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_open(path.data(), path.size(), &out, &err), err, "zu_open")) {
+    if (auto e = detail::checked(zu_open(path.data(), path.size(), &out, &err), &err, "zu_open")) {
       return std::move(*e);
     }
     return Connection(out);
@@ -2573,7 +2593,7 @@ class Connection {
   static detail::Outcome<Connection> create_impl(std::string_view path) {
     zu_conn* out = nullptr;
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_create(path.data(), path.size(), &out, &err), err,
+    if (auto e = detail::checked(zu_create(path.data(), path.size(), &out, &err), &err,
                                  "zu_create")) {
       return std::move(*e);
     }
@@ -2582,7 +2602,7 @@ class Connection {
   static detail::Outcome<Connection> memory_impl() {
     zu_conn* out = nullptr;
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_memory(&out, &err), err, "zu_memory")) {
+    if (auto e = detail::checked(zu_memory(&out, &err), &err, "zu_memory")) {
       return std::move(*e);
     }
     return Connection(out);
@@ -2590,7 +2610,7 @@ class Connection {
   detail::Outcome<Connection> duplicate_impl() {
     zu_conn* out = nullptr;
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_conn_duplicate(h_.get(), &out, &err), err,
+    if (auto e = detail::checked(zu_conn_duplicate(h_.get(), &out, &err), &err,
                                  "zu_conn_duplicate")) {
       return std::move(*e);
     }
@@ -2599,7 +2619,7 @@ class Connection {
   detail::Outcome<Result> query_impl(std::string_view q) {
     zu_result* out = nullptr;
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_query(h_.get(), q.data(), q.size(), &out, &err), err,
+    if (auto e = detail::checked(zu_query(h_.get(), q.data(), q.size(), &out, &err), &err,
                                  "zu_query")) {
       return std::move(*e);
     }
@@ -2608,7 +2628,7 @@ class Connection {
   detail::Outcome<Statement> prepare_impl(std::string_view q) {
     zu_stmt* out = nullptr;
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_prepare(h_.get(), q.data(), q.size(), &out, &err), err,
+    if (auto e = detail::checked(zu_prepare(h_.get(), q.data(), q.size(), &out, &err), &err,
                                  "zu_prepare")) {
       return std::move(*e);
     }
@@ -2648,21 +2668,21 @@ class Connection {
   }
   detail::Outcome<detail::Nothing> begin_impl(bool read_only) {
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_begin(h_.get(), read_only ? 1 : 0, &err), err, "zu_begin")) {
+    if (auto e = detail::checked(zu_begin(h_.get(), read_only ? 1 : 0, &err), &err, "zu_begin")) {
       return std::move(*e);
     }
     return detail::Nothing{};
   }
   detail::Outcome<detail::Nothing> commit_impl() {
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_commit(h_.get(), &err), err, "zu_commit")) {
+    if (auto e = detail::checked(zu_commit(h_.get(), &err), &err, "zu_commit")) {
       return std::move(*e);
     }
     return detail::Nothing{};
   }
   detail::Outcome<detail::Nothing> rollback_impl() {
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_rollback(h_.get(), &err), err, "zu_rollback")) {
+    if (auto e = detail::checked(zu_rollback(h_.get(), &err), &err, "zu_rollback")) {
       return std::move(*e);
     }
     return detail::Nothing{};
@@ -2679,7 +2699,7 @@ class Connection {
     zu_appender* out = nullptr;
     zu_error* err = nullptr;
     if (auto e = detail::checked(
-            zu_appender_open(h_.get(), table.data(), table.size(), &out, &err), err,
+            zu_appender_open(h_.get(), table.data(), table.size(), &out, &err), &err,
             "zu_appender_open")) {
       return std::move(*e);
     }
@@ -2687,7 +2707,7 @@ class Connection {
   }
   detail::Outcome<detail::Nothing> register_impl(Frame& f) {
     zu_error* err = nullptr;
-    if (auto e = detail::checked(zu_conn_register(h_.get(), f.raw(), &err), err,
+    if (auto e = detail::checked(zu_conn_register(h_.get(), f.raw(), &err), &err,
                                  "zu_conn_register")) {
       return std::move(*e);
     }
@@ -2697,7 +2717,7 @@ class Connection {
     std::int32_t out = 0;
     zu_error* err = nullptr;
     if (auto e = detail::checked(
-            zu_conn_unregister(h_.get(), name.data(), name.size(), &out, &err), err,
+            zu_conn_unregister(h_.get(), name.data(), name.size(), &out, &err), &err,
             "zu_conn_unregister")) {
       return std::move(*e);
     }
@@ -2805,7 +2825,7 @@ inline expected<Transaction> Connection::try_transaction(bool read_only) {
 inline detail::Outcome<Connection> Database::connect_impl() const {
   zu_conn* out = nullptr;
   zu_error* err = nullptr;
-  if (auto e = detail::checked(zu_connect(h_.get(), &out, &err), err, "zu_connect")) {
+  if (auto e = detail::checked(zu_connect(h_.get(), &out, &err), &err, "zu_connect")) {
     return std::move(*e);
   }
   return Connection(out);
@@ -2827,7 +2847,7 @@ inline detail::Outcome<detail::Nothing> Result::arrow_impl(zu_conn* conn, ArrowA
   /* The call writes NULL back on every path, the failing ones included,
    * because the buffers were on their way out before anything could
    * refuse. Nothing is left to free either way. */
-  if (auto e = detail::checked(st, err, "zu_result_arrow")) {
+  if (auto e = detail::checked(st, &err, "zu_result_arrow")) {
     return std::move(*e);
   }
   return detail::Nothing{};
