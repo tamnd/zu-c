@@ -1,3 +1,25 @@
+# The C half of the suite, which is the half that can be wrong about
+# the ABI. A C++ test reaches the ABI through the wrapper, so every
+# promise the wrapper keeps for a caller is a promise the C++ suite
+# cannot ask the ABI to keep: a destructor does not run twice, a
+# zu::Connection has no null state to pass, a Result cannot outlive its
+# Connection by accident. Those are the misuse cases, and they are
+# reachable only from C.
+#
+# POSIX, because the harness makes and clears a temporary directory with
+# mkdir and dirent. CI is Linux and macOS and this is where the tests
+# run; the header itself is built by whatever a consumer has.
+if(UNIX)
+  add_executable(misuse misuse.c)
+  target_link_libraries(misuse PRIVATE zu::zu zu_cpp_build_settings)
+  target_include_directories(misuse PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+  set_target_properties(misuse PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED ON
+    C_EXTENSIONS OFF)
+  add_test(NAME misuse COMMAND misuse)
+endif()
+
 # One executable per file, which is what gives ctest a name per file and
 # a failure a place to be. The harness is a header and there is nothing
 # to fetch.
