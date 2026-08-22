@@ -106,9 +106,13 @@ ZU_TEST(every_width_and_sign_comes_back_as_the_number_it_is) {
       .column("unsign", unsign);
   conn.register_frame(frame);
 
+  /* Every alias in accent quotes, because several of these words are
+   * reserved and which ones is the grammar's business rather than this
+   * test's. A property is read by name and needs no quoting; an alias
+   * after AS is parsed as a name and does. */
   auto r = conn.query(
-      "MATCH (w:Wide) RETURN w.big AS big, w.mid AS mid, w.small AS small, w.tiny AS tiny, "
-      "w.unsign AS unsign");
+      "MATCH (w:Wide) RETURN w.big AS `big`, w.mid AS `mid`, w.small AS `small`, "
+      "w.tiny AS `tiny`, w.unsign AS `unsign`");
   CHECK_EQ(r.row(0).get<std::int64_t>("big"), 1);
   CHECK_EQ(r.row(0).get<std::int64_t>("mid"), 3);
   CHECK_EQ(r.row(0).get<std::int64_t>("small"), 5);
@@ -224,7 +228,7 @@ ZU_TEST(arrow_microseconds_are_scaled_to_the_nanoseconds_this_engine_counts_in) 
   frame.column("at", at, 1000, zu::TemporalKind::local_datetime);
   conn.register_frame(frame);
 
-  auto r = conn.query("MATCH (e:Event) RETURN e.at AS at");
+  auto r = conn.query("MATCH (e:Event) RETURN e.at AS `at`");
   const zu::Temporal read = r.row(0).get<zu::Temporal>(0);
   CHECK_EQ(read.kind, zu::TemporalKind::local_datetime);
   CHECK_EQ(read.count, 1'700'000'000'000'000'000);

@@ -29,7 +29,7 @@ if(POLICY CMP0144)
 endif()
 
 project(zu-cpp
-  VERSION 0.12.0
+  VERSION 0.14.0
   DESCRIPTION "The header-only C++ wrapper over libzu"
   HOMEPAGE_URL "https://github.com/tamnd/zu-c"
   LANGUAGES C CXX)
@@ -78,9 +78,9 @@ if(TARGET zu::zu)
   # is not fatal here, because the two numbers are counts and a header
   # newer than this wrapper is usually only wider, but it is worth
   # saying out loud rather than finding at the first struct.
-  if(NOT ZU_ABI_VERSION VERSION_EQUAL "0.12")
+  if(NOT ZU_ABI_VERSION VERSION_EQUAL "0.14")
     message(WARNING
-      "zu.h declares ABI ${ZU_ABI_VERSION} and this wrapper was written against 0.12")
+      "zu.h declares ABI ${ZU_ABI_VERSION} and this wrapper was written against 0.14")
   endif()
 else()
   message(STATUS

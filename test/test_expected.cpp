@@ -97,6 +97,27 @@ ZU_TEST(a_column_that_is_not_there_returns_rather_than_throws) {
   CHECK_EQ(*found, 0u);
 }
 
+ZU_TEST(the_calls_abi_0_14_added_have_the_expected_spelling_too) {
+  auto conn = zu::Connection::memory();
+  auto r = conn.query("RETURN X'00AB' AS b, 'ada' AS s");
+
+  const auto b = r.cell(0, 0).try_as_bytes();
+  CHECK(b.has_value());
+  CHECK_EQ(b->size(), 2u);
+  /* Text read as octets is a mistake in the program rather than a
+   * failure of the engine, and here it comes back rather than throws. */
+  const auto wrong = r.cell(0, 1).try_as_bytes();
+  CHECK(!wrong.has_value());
+  CHECK_EQ(wrong.error().status(), zu::Status::misuse);
+
+  /* Two layers of nothing, and they mean different things: the outer
+   * one is the call having failed, the inner one is no table having
+   * that id. */
+  const auto absent = conn.try_table_name(9999);
+  CHECK(absent.has_value());
+  CHECK(!absent->has_value());
+}
+
 ZU_TEST(the_bulk_paths_have_the_expected_spelling_too) {
   zt::TempDir dir("expected");
   const std::string path = dir.file("people.zu");

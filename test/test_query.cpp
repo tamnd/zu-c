@@ -21,7 +21,7 @@ ZU_TEST(a_database_in_memory_answers_a_statement) {
 }
 
 ZU_TEST(the_wrapper_and_the_library_agree_about_the_abi) {
-  CHECK_EQ(zu::abi_version(), "0.12");
+  CHECK_EQ(zu::abi_version(), "0.14");
   CHECK(!zu::version().empty());
 }
 

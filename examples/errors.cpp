@@ -34,7 +34,7 @@ int main() {
 
   /* So is reading a value into a type it does not fit. A silently
    * truncated 100000 is the bug this exists to not have. */
-  auto big = conn.query("RETURN 100000 AS big");
+  auto big = conn.query("RETURN 100000 AS `big`");
   try {
     big.row(0).get<std::int16_t>("big");
   } catch (const zu::ProgrammingError& e) {
