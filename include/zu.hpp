@@ -279,6 +279,10 @@ class Error {
     out.condition_ = copy(e, &zu_error_standard_text);
     out.doc_url_ = copy(e, &zu_error_doc_url);
     out.excerpt_ = copy(e, &zu_error_excerpt);
+    out.subject_kind_ = copy(e, &zu_error_subject_kind);
+    out.subject_ = copy(e, &zu_error_subject);
+    out.graph_ = copy(e, &zu_error_graph);
+    out.schema_ = copy(e, &zu_error_schema);
     const std::int32_t sev = zu_error_severity(e);
     out.severity_ = sev < 0 ? Severity::exception : static_cast<Severity>(sev);
     out.retryable_ = zu_error_retryable(e) == 1;
@@ -322,6 +326,23 @@ class Error {
    * counts characters into. Both halves of a caret without having kept
    * the statement text. */
   std::optional<std::string_view> excerpt() const noexcept { return view(excerpt_); }
+
+  /* What the condition is about, as a kind and a name: "variable" and
+   * "nope", "function" and "nosuchfn". This is the pair a tool acts on
+   * rather than prints, because a name in a sentence has to be parsed
+   * back out of it and a name here does not. An editor underlines the
+   * subject, a REPL suggests a spelling near it, and a test asserts
+   * which thing was wrong rather than matching on English.
+   *
+   * Empty for the conditions that are about no particular thing, a
+   * division by zero among them. */
+  std::optional<std::string_view> subject_kind() const noexcept { return view(subject_kind_); }
+  std::optional<std::string_view> subject() const noexcept { return view(subject_); }
+
+  /* Where the statement was running, which a host with more than one
+   * graph open needs in order to say which one refused it. */
+  std::optional<std::string_view> graph() const noexcept { return view(graph_); }
+  std::optional<std::string_view> schema() const noexcept { return view(schema_); }
 
   Severity severity() const noexcept { return severity_; }
 
@@ -416,6 +437,10 @@ class Error {
   std::optional<std::string> condition_;
   std::optional<std::string> doc_url_;
   std::optional<std::string> excerpt_;
+  std::optional<std::string> subject_kind_;
+  std::optional<std::string> subject_;
+  std::optional<std::string> graph_;
+  std::optional<std::string> schema_;
   Severity severity_ = Severity::success;
   bool retryable_ = false;
   std::optional<Position> position_;

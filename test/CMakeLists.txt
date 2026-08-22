@@ -8,6 +8,7 @@
 set(ZU_CPP_TEST_FILES
   test_query.cpp
   test_errors.cpp
+  test_conditions.cpp
   test_values.cpp
   test_statement.cpp
   test_transaction.cpp
