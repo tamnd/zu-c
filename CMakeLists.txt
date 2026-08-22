@@ -125,6 +125,10 @@ endif()
 if(TARGET zu::zu AND ZU_CPP_TESTS)
   enable_testing()
   add_subdirectory(test)
+  # The front page is code too, and it was the only code here that
+  # nothing compiled. It is read out of README.md at configure time, so
+  # it is part of the suite rather than a copy of the suite.
+  add_subdirectory(readme)
 endif()
 
 if(TARGET zu::zu AND ZU_CPP_EXAMPLES)
