@@ -250,7 +250,11 @@ ZU_TEST(a_failure_that_is_not_a_statement_carries_no_condition_yet) {
   const std::string notadb = dir.file("notadb.zu");
   zt::write_file(notadb, "this is not a database");
   try {
-    zu::Connection::open(notadb);
+    /* Cast away, because the call is here to throw and the connection
+     * it would answer on the path this case says cannot happen is one
+     * nothing wants. Everywhere else, a dropped return is the mistake
+     * [[nodiscard]] is for. */
+    (void)zu::Connection::open(notadb);
     zt::fail(__FILE__, __LINE__, "a file that is not a database opened");
   } catch (const zu::Exception& e) {
     CHECK(!e.error().message().empty());

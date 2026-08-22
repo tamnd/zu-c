@@ -100,8 +100,8 @@ lynn
 
 ## What is here
 
-- `include/zu.hpp`, the header-only C++20 wrapper. RAII on every handle, exceptions carrying the GQLSTATUS condition, ranges over results, `std::span` over columns, and a `std::expected` mirror of the whole error model under C++23. Optional and additive, the C API stays usable on its own.
-- `test/`, the suite. Every case is built twice, once at C++23 and once at the C++20 floor, so the standard the header claims to support is the standard it is tested against.
+- `include/zu.hpp`, the header-only C++20 wrapper. RAII on every handle, exceptions carrying the GQLSTATUS condition, ranges over results, `std::span` over columns, `std::formatter` on everything worth printing, and a `std::expected` mirror of the whole error model under C++23. Optional and additive, the C API stays usable on its own.
+- `test/`, the suite. Every case is built twice, once at C++23 and once at the C++20 floor, so the standard the header claims to support is the standard it is tested against. `test/test_idiom.cpp` is mostly `static_assert`, and deliberately: that a `Result` is a random access range, that a handle moves and refuses to be copied, that a view into a result is not a borrowed one, and that an exception is a `std::exception` are promises the compiler should keep at every call site rather than ones a case checked once.
 - `examples/`, one per thing worth knowing. Every example is also a test, because an example that compiles and does not run is documentation that lies.
 - `readme/`, which lifts the two programs above off this page, builds them, runs them and diffs what they print against the blocks under them. The page is the code most people read and the code least often run, and it is the only code here that had nothing compiling it.
 - `bench/`, the numbers below, with a timing harness that needs no package manager to run.
