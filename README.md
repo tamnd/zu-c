@@ -108,6 +108,8 @@ lynn
 - `cmake/`, `find_package(Zu)` to find the engine and `find_package(zu-cpp)` to find this. vcpkg, Conan and pkg-config packaging come with the first release.
 - `docs/`, the API reference, generated from `include/zu.hpp` and published with the release rather than checked in beside the source. `docs/reference.py` is the part worth reading: Doxygen exits 0 on a header it extracted nothing from, so the check counts the types the header declares and fails when the reference does not have them, which is what an empty reference looks like from the outside.
 
+- `scripts/install.sh`, the install a person with nothing on their machine gets, run nightly in a container holding a compiler and nothing else. It installs the wrapper, takes both programs off this page, builds them against the install and diffs what they print against the blocks under them. It is run again three times with a piece taken out of the install, because a build that still works without the header is a build that found one somewhere else.
+
 Four sanitizer jobs run over the suite, because an ABI nine languages depend on should fail loudly rather than corrupt quietly. The whole tree runs under ASan and UBSan; `test/misuse.c` runs again with leak detection on, which it can and the C++ files cannot, because it is the file that gives every handle back by hand; `test/threads.c` runs under TSan; and both C files run under valgrind, which sees what the sanitizers cannot, since libzu is compiled without instrumentation and memcheck does not need any. `test/tsan.supp` records what TSan is unable to be told about a library that takes no pthread lock, and why the reports from inside the engine are dropped rather than read.
 
 ## Building
