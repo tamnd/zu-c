@@ -1,0 +1,466 @@
+define ZU_HAS_EXPECTED
+define ZU_HAS_FORMAT
+formatter std::formatter< zu::Error >
+formatter std::formatter< zu::Node >
+formatter std::formatter< zu::Position >
+formatter std::formatter< zu::Rel >
+formatter std::formatter< zu::Severity >
+formatter std::formatter< zu::Status >
+formatter std::formatter< zu::Temporal >
+formatter std::formatter< zu::TemporalKind >
+formatter std::formatter< zu::Type >
+formatter std::formatter< zu::Value >
+class zu::Appender
+func explicit zu::Appender::Appender(zu_appender *) noexcept
+func zu::Appender::Appender() = default
+func zu::Appender::append(Temporal) -> Appender &
+func zu::Appender::append(bool) -> Appender &
+func zu::Appender::append(const char *) -> Appender &
+func zu::Appender::append(double) -> Appender &
+func zu::Appender::append(int) -> Appender &
+func zu::Appender::append(std::int64_t) -> Appender &
+func zu::Appender::append(std::span< const std::uint8_t >) -> Appender &
+func zu::Appender::append(std::string_view) -> Appender &
+func zu::Appender::buffered() const -> std::uint64_t
+func zu::Appender::close() -> std::uint64_t
+func zu::Appender::col_name(std::uint32_t) const -> std::string_view
+func zu::Appender::cols() const -> std::uint32_t
+func zu::Appender::committed() const -> std::uint64_t
+func zu::Appender::discard() -> std::uint64_t
+func zu::Appender::end_row() -> Appender &
+func zu::Appender::flush() -> void
+func explicit zu::Appender::operator bool() const noexcept
+func zu::Appender::raw() const noexcept -> zu_appender *
+func zu::Appender::row<class... Ts>(const Ts &...) -> Appender &
+func zu::Appender::try_append(Temporal) -> expected< void >
+func zu::Appender::try_append(bool) -> expected< void >
+func zu::Appender::try_append(double) -> expected< void >
+func zu::Appender::try_append(std::int64_t) -> expected< void >
+func zu::Appender::try_append(std::span< const std::uint8_t >) -> expected< void >
+func zu::Appender::try_append(std::string_view) -> expected< void >
+func zu::Appender::try_close() -> expected< std::uint64_t >
+func zu::Appender::try_col_name(std::uint32_t) const -> expected< std::string_view >
+func zu::Appender::try_discard() -> expected< std::uint64_t >
+func zu::Appender::try_end_row() -> expected< void >
+func zu::Appender::try_flush() -> expected< void >
+class zu::ClosedError : public zu::ProgrammingError
+class zu::ConcurrentError : public zu::ProgrammingError
+class zu::Config
+func zu::Config::Config()
+func zu::Config::memory_limit(std::size_t) -> Config &
+func zu::Config::raw() const noexcept -> const zu_config *
+func zu::Config::read_only(bool = true) -> Config &
+func zu::Config::set(std::string_view, std::string_view) -> Config &
+func zu::Config::threads(std::size_t) -> Config &
+func zu::Config::try_set(std::string_view, std::string_view) -> expected< void >
+class zu::Connection
+func explicit zu::Connection::Connection(zu_conn *) noexcept
+func zu::Connection::Connection() = default
+func zu::Connection::Connection(Connection &&) noexcept = default
+using zu::Connection::Progress -> std::function< bool(std::uint64_t rows, std::chrono::milliseconds elapsed)>
+func zu::Connection::appender(std::string_view) -> Appender
+func zu::Connection::begin(bool = false) -> void
+func zu::Connection::clear_progress() -> void
+func zu::Connection::commit() -> void
+func static zu::Connection::create(std::string_view) -> Connection
+func zu::Connection::duplicate() -> Connection
+func zu::Connection::in_transaction() const -> bool
+func zu::Connection::interrupt() -> void
+func static zu::Connection::memory() -> Connection
+func zu::Connection::on_progress(std::chrono::milliseconds, Progress) -> void
+func static zu::Connection::open(std::string_view) -> Connection
+func explicit zu::Connection::operator bool() const noexcept
+func zu::Connection::operator=(Connection &&) noexcept -> Connection &
+func zu::Connection::prepare(std::string_view) -> Statement
+func zu::Connection::query(std::string_view) -> Result
+func zu::Connection::raw() const noexcept -> zu_conn *
+func zu::Connection::register_frame(Frame &) -> void
+func zu::Connection::registered() const -> std::vector< std::string >
+func zu::Connection::rollback() -> void
+func zu::Connection::rows_read() const -> std::uint64_t
+func zu::Connection::table_name(std::uint32_t) const -> std::optional< std::string >
+func zu::Connection::transaction(bool = false) -> Transaction
+func zu::Connection::try_appender(std::string_view) -> expected< Appender >
+func zu::Connection::try_begin(bool = false) -> expected< void >
+func zu::Connection::try_commit() -> expected< void >
+func static zu::Connection::try_create(std::string_view) -> expected< Connection >
+func zu::Connection::try_duplicate() -> expected< Connection >
+func zu::Connection::try_in_transaction() const -> expected< bool >
+func zu::Connection::try_interrupt() -> expected< void >
+func static zu::Connection::try_memory() -> expected< Connection >
+func zu::Connection::try_on_progress(std::chrono::milliseconds, Progress) -> expected< void >
+func static zu::Connection::try_open(std::string_view) -> expected< Connection >
+func zu::Connection::try_prepare(std::string_view) -> expected< Statement >
+func zu::Connection::try_query(std::string_view) -> expected< Result >
+func zu::Connection::try_register_frame(Frame &) -> expected< void >
+func zu::Connection::try_registered() const -> expected< std::vector< std::string > >
+func zu::Connection::try_rollback() -> expected< void >
+func zu::Connection::try_rows_read() const -> expected< std::uint64_t >
+func zu::Connection::try_table_name(std::uint32_t) const -> expected< std::optional< std::string > >
+func zu::Connection::try_transaction(bool = false) -> expected< Transaction >
+func zu::Connection::try_unregister_frame(std::string_view) -> expected< bool >
+func zu::Connection::unregister_frame(std::string_view) -> bool
+func zu::Connection::~Connection()
+class zu::ConnectionError : public zu::Exception
+func explicit zu::ConnectionError::Exception(Error)
+class zu::DataError : public zu::Exception
+func explicit zu::DataError::Exception(Error)
+class zu::Database
+func explicit zu::Database::Database(zu_database *) noexcept
+func zu::Database::Database() = default
+func zu::Database::connect() const -> Connection
+func static zu::Database::create(std::string_view, const Config & = Config{}) -> Database
+func zu::Database::is_memory() const -> bool
+func static zu::Database::memory(const Config & = Config{}) -> Database
+func static zu::Database::open(std::string_view, const Config & = Config{}) -> Database
+func explicit zu::Database::operator bool() const noexcept
+func zu::Database::path() const -> std::string_view
+func zu::Database::raw() const noexcept -> zu_database *
+func zu::Database::try_connect() const -> expected< Connection >
+func static zu::Database::try_create(std::string_view, const Config & = Config{}) -> expected< Database >
+func static zu::Database::try_memory(const Config & = Config{}) -> expected< Database >
+func static zu::Database::try_open(std::string_view, const Config & = Config{}) -> expected< Database >
+func zu::Database::try_path() const -> expected< std::string_view >
+class zu::Error
+func zu::Error::Error() = default
+func zu::Error::code() const noexcept -> std::optional< std::string_view >
+func zu::Error::condition() const noexcept -> std::optional< std::string_view >
+func zu::Error::doc_url() const noexcept -> std::optional< std::string_view >
+func zu::Error::excerpt() const noexcept -> std::optional< std::string_view >
+func zu::Error::graph() const noexcept -> std::optional< std::string_view >
+func zu::Error::message() const noexcept -> std::string_view
+func zu::Error::position() const noexcept -> std::optional< Position >
+func zu::Error::report() const -> std::string
+func zu::Error::retryable() const noexcept -> bool
+func zu::Error::schema() const noexcept -> std::optional< std::string_view >
+func zu::Error::severity() const noexcept -> Severity
+func zu::Error::status() const noexcept -> Status
+func zu::Error::subject() const noexcept -> std::optional< std::string_view >
+func zu::Error::subject_kind() const noexcept -> std::optional< std::string_view >
+func static zu::Error::take(Status, zu_error *, std::string_view = {}) -> Error
+class zu::Exception : public std::runtime_error
+func explicit zu::Exception::Exception(Error)
+func zu::Exception::code() const noexcept -> std::optional< std::string_view >
+func zu::Exception::error() const noexcept -> const Error &
+func zu::Exception::retryable() const noexcept -> bool
+func zu::Exception::status() const noexcept -> Status
+class zu::Frame
+func explicit zu::Frame::Frame(zu_frame *) noexcept
+func zu::Frame::Frame() = default
+func zu::Frame::bools(std::string_view, std::span< const std::uint8_t >, std::uint64_t) -> Frame &
+func zu::Frame::column<detail::NumericRange R>(std::string_view, const R &, std::int64_t = 1, TemporalKind = TemporalKind::plain) -> Frame &
+func static zu::Frame::create(std::string_view, std::uint64_t) -> Frame
+func static zu::Frame::create(std::string_view, std::uint64_t, std::function< void()>) -> Frame
+func static zu::Frame::create(std::string_view, std::uint64_t, std::shared_ptr< void >) -> Frame
+func explicit zu::Frame::operator bool() const noexcept
+func zu::Frame::raw() const noexcept -> zu_frame *
+func zu::Frame::strings(std::string_view, std::span< const std::int32_t >, std::span< const char >) -> Frame &
+func zu::Frame::strings(std::string_view, std::span< const std::int64_t >, std::span< const char >) -> Frame &
+func zu::Frame::try_bools(std::string_view, std::span< const std::uint8_t >, std::uint64_t) -> expected< void >
+func zu::Frame::try_column<detail::NumericRange R>(std::string_view, const R &, std::int64_t = 1, TemporalKind = TemporalKind::plain) -> expected< void >
+func static zu::Frame::try_create(std::string_view, std::uint64_t, std::function< void()> = {}) -> expected< Frame >
+func zu::Frame::try_strings(std::string_view, std::span< const std::int32_t >, std::span< const char >) -> expected< void >
+func zu::Frame::views(std::string_view, std::span< const std::byte >, std::span< const void *const >, std::span< const std::size_t >, std::uint64_t) -> Frame &
+class zu::InternalError : public zu::Exception
+func explicit zu::InternalError::Exception(Error)
+class zu::InterruptedError : public zu::Exception
+func explicit zu::InterruptedError::Exception(Error)
+class zu::Loader
+func explicit zu::Loader::Loader(zu_loader *) noexcept
+func zu::Loader::Loader() = default
+func zu::Loader::bools(std::string_view, std::span< const std::int32_t >) -> Loader &
+func static zu::Loader::create(std::string_view) -> Loader
+func zu::Loader::doubles(std::string_view, std::span< const double >) -> Loader &
+func zu::Loader::edges(std::span< const std::uint32_t >, std::span< const std::uint32_t >) -> Loader &
+func zu::Loader::finish() -> void
+func zu::Loader::ints(std::string_view, std::span< const std::int64_t >) -> Loader &
+func explicit zu::Loader::operator bool() const noexcept
+func zu::Loader::raw() const noexcept -> zu_loader *
+func zu::Loader::strings<detail::StringRange R>(std::string_view, const R &) -> Loader &
+func zu::Loader::table(std::string_view, std::string_view, std::uint64_t) -> Loader &
+func zu::Loader::temporals(std::string_view, TemporalKind, std::span< const std::int64_t >) -> Loader &
+func zu::Loader::try_bools(std::string_view, std::span< const std::int32_t >) -> expected< void >
+func static zu::Loader::try_create(std::string_view) -> expected< Loader >
+func zu::Loader::try_doubles(std::string_view, std::span< const double >) -> expected< void >
+func zu::Loader::try_edges(std::span< const std::uint32_t >, std::span< const std::uint32_t >) -> expected< void >
+func zu::Loader::try_finish() -> expected< void >
+func zu::Loader::try_ints(std::string_view, std::span< const std::int64_t >) -> expected< void >
+func zu::Loader::try_strings<detail::StringRange R>(std::string_view, const R &) -> expected< void >
+func zu::Loader::try_table(std::string_view, std::string_view, std::uint64_t) -> expected< void >
+func zu::Loader::try_temporals(std::string_view, TemporalKind, std::span< const std::int64_t >) -> expected< void >
+struct zu::Node
+var zu::Node::offset -> std::uint64_t
+friend zu::Node::operator==(const Node &, const Node &) = default -> bool
+var zu::Node::table -> std::uint32_t
+struct zu::Position
+var zu::Position::column -> std::uint32_t
+var zu::Position::line -> std::uint32_t
+var zu::Position::offset -> std::uint32_t
+friend zu::Position::operator==(const Position &, const Position &) = default -> bool
+class zu::ProgrammingError : public zu::Exception
+func explicit zu::ProgrammingError::Exception(Error)
+struct zu::Rel
+var zu::Rel::dst -> std::uint64_t
+friend zu::Rel::operator==(const Rel &, const Rel &) = default -> bool
+var zu::Rel::src -> std::uint64_t
+var zu::Rel::table -> std::uint32_t
+class zu::Result
+struct zu::Result::ChunkExtent
+var zu::Result::ChunkExtent::offset -> std::uint64_t
+var zu::Result::ChunkExtent::rows -> std::uint64_t
+func explicit zu::Result::Result(zu_result *) noexcept
+func zu::Result::Result() = default
+func zu::Result::begin() const noexcept -> iterator
+func zu::Result::cell(std::uint64_t, std::uint32_t) const -> Value
+func zu::Result::chunk(std::uint64_t) const -> ChunkExtent
+func zu::Result::chunk_count() const noexcept -> std::uint64_t
+func zu::Result::chunk_doubles(std::uint64_t, std::uint32_t) const -> std::span< const double >
+func zu::Result::chunk_ints(std::uint64_t, std::uint32_t) const -> std::span< const std::int64_t >
+func zu::Result::chunk_node_offsets(std::uint64_t, std::uint32_t) const -> std::span< const std::uint64_t >
+func zu::Result::chunk_valid(std::uint64_t, std::uint32_t) const -> std::span< const std::uint8_t >
+func zu::Result::cols() const noexcept -> std::uint32_t
+func zu::Result::column(std::string_view) const -> std::uint32_t
+func zu::Result::doubles(std::string_view) const -> std::span< const double >
+func zu::Result::doubles(std::uint32_t) const -> std::span< const double >
+func zu::Result::empty() const noexcept -> bool
+func zu::Result::end() const noexcept -> iterator
+func zu::Result::find(std::string_view) const -> std::optional< std::uint32_t >
+func zu::Result::gqlstatus() const -> std::string_view
+func zu::Result::ints(std::string_view) const -> std::span< const std::int64_t >
+func zu::Result::ints(std::uint32_t) const -> std::span< const std::int64_t >
+class zu::Result::iterator
+using zu::Result::iterator::difference_type -> std::ptrdiff_t
+func zu::Result::iterator::iterator() = default
+func zu::Result::iterator::iterator(const Result *, std::uint64_t) noexcept
+using zu::Result::iterator::iterator_category -> std::input_iterator_tag
+using zu::Result::iterator::iterator_concept -> std::random_access_iterator_tag
+func zu::Result::iterator::operator*() const noexcept -> Row
+friend zu::Result::iterator::operator+(difference_type, iterator) noexcept -> iterator
+friend zu::Result::iterator::operator+(iterator, difference_type) noexcept -> iterator
+func zu::Result::iterator::operator++() noexcept -> iterator &
+func zu::Result::iterator::operator++(int) noexcept -> iterator
+func zu::Result::iterator::operator+=(difference_type) noexcept -> iterator &
+friend zu::Result::iterator::operator-(const iterator &, const iterator &) noexcept -> difference_type
+friend zu::Result::iterator::operator-(iterator, difference_type) noexcept -> iterator
+func zu::Result::iterator::operator--() noexcept -> iterator &
+func zu::Result::iterator::operator--(int) noexcept -> iterator
+func zu::Result::iterator::operator-=(difference_type) noexcept -> iterator &
+friend zu::Result::iterator::operator<=>(const iterator &, const iterator &) noexcept -> std::strong_ordering
+friend zu::Result::iterator::operator==(const iterator &, const iterator &) noexcept -> bool
+func zu::Result::iterator::operator[](difference_type) const noexcept -> Row
+using zu::Result::iterator::reference -> Row
+using zu::Result::iterator::value_type -> Row
+func zu::Result::name(std::uint32_t) const -> std::string_view
+func zu::Result::names() const -> const std::vector< std::string_view > &
+func zu::Result::node_offsets(std::string_view) const -> std::span< const std::uint64_t >
+func zu::Result::node_offsets(std::uint32_t) const -> std::span< const std::uint64_t >
+func zu::Result::notice_count() const -> std::uint32_t
+func zu::Result::notices() const -> std::vector< Error >
+func explicit zu::Result::operator bool() const noexcept
+func zu::Result::raw() const noexcept -> zu_result *
+func zu::Result::row(std::uint64_t) const noexcept -> Row
+func zu::Result::rows() const noexcept -> std::uint64_t
+func zu::Result::size() const noexcept -> std::uint64_t
+func zu::Result::str(std::uint64_t, std::uint32_t) const -> std::string_view
+func zu::Result::to_arrow(ArrowArrayStream *, std::uint64_t = 0) && -> void
+func zu::Result::to_arrow(Connection &, ArrowArrayStream *, std::uint64_t = 0) && -> void
+func zu::Result::try_cell(std::uint64_t, std::uint32_t) const -> expected< Value >
+func zu::Result::try_chunk(std::uint64_t) const -> expected< ChunkExtent >
+func zu::Result::try_chunk_doubles(std::uint64_t, std::uint32_t) const -> expected< std::span< const double > >
+func zu::Result::try_chunk_ints(std::uint64_t, std::uint32_t) const -> expected< std::span< const std::int64_t > >
+func zu::Result::try_chunk_node_offsets(std::uint64_t, std::uint32_t) const -> expected< std::span< const std::uint64_t > >
+func zu::Result::try_chunk_valid(std::uint64_t, std::uint32_t) const -> expected< std::span< const std::uint8_t > >
+func zu::Result::try_column(std::string_view) const -> expected< std::uint32_t >
+func zu::Result::try_doubles(std::uint32_t) const -> expected< std::span< const double > >
+func zu::Result::try_ints(std::uint32_t) const -> expected< std::span< const std::int64_t > >
+func zu::Result::try_name(std::uint32_t) const -> expected< std::string_view >
+func zu::Result::try_node_offsets(std::uint32_t) const -> expected< std::span< const std::uint64_t > >
+func zu::Result::try_str(std::uint64_t, std::uint32_t) const -> expected< std::string_view >
+func zu::Result::try_to_arrow(Connection &, ArrowArrayStream *, std::uint64_t = 0) && -> expected< void >
+func zu::Result::try_type(std::uint64_t, std::uint32_t) const -> expected< Type >
+func zu::Result::try_valid(std::uint32_t) const -> expected< std::span< const std::uint8_t > >
+func zu::Result::type(std::uint64_t, std::uint32_t) const -> Type
+func zu::Result::valid(std::string_view) const -> std::span< const std::uint8_t >
+func zu::Result::valid(std::uint32_t) const -> std::span< const std::uint8_t >
+class zu::Row
+func zu::Row::Row() = default
+func zu::Row::Row(const Result *, std::uint64_t) noexcept
+func zu::Row::get<class T>(std::string_view) const -> T
+func zu::Row::get<class T>(std::uint32_t) const -> T
+func zu::Row::index() const noexcept -> std::uint64_t
+func zu::Row::is_null(std::string_view) const -> bool
+func zu::Row::is_null(std::uint32_t) const -> bool
+func zu::Row::operator[](std::string_view) const -> Value
+func zu::Row::operator[](std::uint32_t) const -> Value
+func zu::Row::size() const noexcept -> std::uint32_t
+func zu::Row::type(std::string_view) const -> Type
+func zu::Row::type(std::uint32_t) const -> Type
+enum zu::Severity -> int
+enum value zu::Severity::exception -> ZU_SEVERITY_EXCEPTION
+enum value zu::Severity::informational -> ZU_SEVERITY_INFORMATIONAL
+enum value zu::Severity::no_data -> ZU_SEVERITY_NO_DATA
+enum value zu::Severity::success -> ZU_SEVERITY_SUCCESS
+enum value zu::Severity::warning -> ZU_SEVERITY_WARNING
+class zu::Statement
+func explicit zu::Statement::Statement(zu_stmt *) noexcept
+func zu::Statement::Statement() = default
+func zu::Statement::bind(std::string_view, Temporal) -> Statement &
+func zu::Statement::bind(std::string_view, bool) -> Statement &
+func zu::Statement::bind(std::string_view, const char *) -> Statement &
+func zu::Statement::bind(std::string_view, double) -> Statement &
+func zu::Statement::bind(std::string_view, int) -> Statement &
+func zu::Statement::bind(std::string_view, std::int64_t) -> Statement &
+func zu::Statement::bind(std::string_view, std::nullptr_t) -> Statement &
+func zu::Statement::bind(std::string_view, std::string_view) -> Statement &
+func zu::Statement::bind<class T>(std::string_view, const std::optional< T > &) -> Statement &
+func zu::Statement::bind_null(std::string_view) -> Statement &
+func zu::Statement::execute() -> Result
+func explicit zu::Statement::operator bool() const noexcept
+func zu::Statement::raw() const noexcept -> zu_stmt *
+func zu::Statement::try_bind(std::string_view, Temporal) -> expected< void >
+func zu::Statement::try_bind(std::string_view, bool) -> expected< void >
+func zu::Statement::try_bind(std::string_view, double) -> expected< void >
+func zu::Statement::try_bind(std::string_view, std::int64_t) -> expected< void >
+func zu::Statement::try_bind(std::string_view, std::string_view) -> expected< void >
+func zu::Statement::try_bind_null(std::string_view) -> expected< void >
+func zu::Statement::try_execute() -> expected< Result >
+enum zu::Status -> int
+enum value zu::Status::conflict -> ZU_CONFLICT
+enum value zu::Status::corrupt -> ZU_CORRUPT
+enum value zu::Status::done -> ZU_DONE
+enum value zu::Status::error -> ZU_ERROR
+enum value zu::Status::interrupted -> ZU_INTERRUPTED
+enum value zu::Status::io -> ZU_IO
+enum value zu::Status::misuse -> ZU_MISUSE
+enum value zu::Status::misuse_closed -> ZU_MISUSE_CLOSED
+enum value zu::Status::misuse_concurrent -> ZU_MISUSE_CONCURRENT
+enum value zu::Status::ok -> ZU_OK
+enum value zu::Status::unsupported -> ZU_UNSUPPORTED
+class zu::SyntaxError : public zu::Exception
+func explicit zu::SyntaxError::Exception(Error)
+struct zu::Temporal
+func zu::Temporal::as_days() const -> std::chrono::sys_days
+func zu::Temporal::as_months() const -> std::chrono::months
+func zu::Temporal::as_nanos() const -> std::chrono::nanoseconds
+func zu::Temporal::as_time() const -> std::chrono::sys_time< std::chrono::nanoseconds >
+var zu::Temporal::count -> std::int64_t
+func static zu::Temporal::date(std::chrono::sys_days) -> Temporal
+func static zu::Temporal::date(std::chrono::year_month_day) -> Temporal
+func zu::Temporal::east() const -> std::chrono::minutes
+var zu::Temporal::kind -> TemporalKind
+func static zu::Temporal::local_datetime(std::chrono::sys_time< std::chrono::nanoseconds >) -> Temporal
+func static zu::Temporal::local_time(std::chrono::nanoseconds) -> Temporal
+func static zu::Temporal::months(std::chrono::months) -> Temporal
+func static zu::Temporal::nanos(std::chrono::nanoseconds) -> Temporal
+var zu::Temporal::offset -> std::int32_t
+friend zu::Temporal::operator==(const Temporal &, const Temporal &) = default -> bool
+func static zu::Temporal::zoned_datetime(std::chrono::sys_time< std::chrono::nanoseconds >, std::chrono::minutes) -> Temporal
+func static zu::Temporal::zoned_time(std::chrono::nanoseconds, std::chrono::minutes) -> Temporal
+enum zu::TemporalKind -> int
+enum value zu::TemporalKind::date -> ZU_TEMPORAL_DATE
+enum value zu::TemporalKind::duration_day_time -> ZU_TEMPORAL_DURATION_DAY_TIME
+enum value zu::TemporalKind::duration_year_month -> ZU_TEMPORAL_DURATION_YEAR_MONTH
+enum value zu::TemporalKind::local_datetime -> ZU_TEMPORAL_LOCAL_DATETIME
+enum value zu::TemporalKind::local_time -> ZU_TEMPORAL_LOCAL_TIME
+enum value zu::TemporalKind::plain -> ZU_FRAME_PLAIN
+enum value zu::TemporalKind::zoned_datetime -> ZU_TEMPORAL_ZONED_DATETIME
+enum value zu::TemporalKind::zoned_time -> ZU_TEMPORAL_ZONED_TIME
+class zu::Transaction
+func explicit zu::Transaction::Transaction(Connection &) noexcept
+func zu::Transaction::Transaction() = default
+func zu::Transaction::Transaction(Transaction &&) noexcept
+func zu::Transaction::Transaction(const Transaction &) = delete
+func zu::Transaction::commit() -> void
+func explicit zu::Transaction::operator bool() const noexcept
+func zu::Transaction::operator=(Transaction &&) noexcept -> Transaction &
+func zu::Transaction::operator=(const Transaction &) = delete -> Transaction &
+func zu::Transaction::rollback() -> void
+func zu::Transaction::~Transaction()
+class zu::TransactionError : public zu::Exception
+func explicit zu::TransactionError::Exception(Error)
+enum zu::Type -> int
+enum value zu::Type::binding_table -> ZU_TYPE_BINDING_TABLE
+enum value zu::Type::boolean -> ZU_TYPE_BOOL
+enum value zu::Type::bytes -> ZU_TYPE_BYTES
+enum value zu::Type::floating -> ZU_TYPE_FLOAT
+enum value zu::Type::graph -> ZU_TYPE_GRAPH
+enum value zu::Type::integer -> ZU_TYPE_INT
+enum value zu::Type::list -> ZU_TYPE_LIST
+enum value zu::Type::node -> ZU_TYPE_NODE
+enum value zu::Type::null -> ZU_TYPE_NULL
+enum value zu::Type::path -> ZU_TYPE_PATH
+enum value zu::Type::record -> ZU_TYPE_RECORD
+enum value zu::Type::rel -> ZU_TYPE_REL
+enum value zu::Type::string -> ZU_TYPE_STR
+enum value zu::Type::temporal -> ZU_TYPE_TEMPORAL
+class zu::Value
+func explicit zu::Value::Value(const zu_value *) noexcept
+func zu::Value::Value() = default
+func zu::Value::as_bool() const -> bool
+func zu::Value::as_bytes() const -> std::span< const std::uint8_t >
+func zu::Value::as_double() const -> double
+func zu::Value::as_int() const -> std::int64_t
+func zu::Value::as_node() const -> Node
+func zu::Value::as_rel() const -> Rel
+func zu::Value::as_string() const -> std::string_view
+func zu::Value::as_temporal() const -> Temporal
+func zu::Value::at(std::uint64_t) const -> Value
+func zu::Value::elements() const -> ValueRange
+func zu::Value::empty() const noexcept -> bool
+func zu::Value::field(std::uint64_t) const -> std::string_view
+func zu::Value::is_null() const noexcept -> bool
+func explicit zu::Value::operator bool() const noexcept
+func zu::Value::operator[](std::uint64_t) const -> Value
+func zu::Value::raw() const noexcept -> const zu_value *
+func zu::Value::size() const noexcept -> std::uint64_t
+func zu::Value::try_as_bool() const -> expected< bool >
+func zu::Value::try_as_bytes() const -> expected< std::span< const std::uint8_t > >
+func zu::Value::try_as_double() const -> expected< double >
+func zu::Value::try_as_int() const -> expected< std::int64_t >
+func zu::Value::try_as_node() const -> expected< Node >
+func zu::Value::try_as_rel() const -> expected< Rel >
+func zu::Value::try_as_string() const -> expected< std::string_view >
+func zu::Value::try_as_temporal() const -> expected< Temporal >
+func zu::Value::try_at(std::uint64_t) const -> expected< Value >
+func zu::Value::try_field(std::uint64_t) const -> expected< std::string_view >
+func zu::Value::type() const noexcept -> Type
+class zu::ValueRange : public std::ranges::view_interface< ValueRange >
+func explicit zu::ValueRange::ValueRange(const Value *) noexcept
+func zu::ValueRange::ValueRange() = default
+func zu::ValueRange::begin() const noexcept -> iterator
+func zu::ValueRange::end() const noexcept -> iterator
+class zu::ValueRange::iterator
+using zu::ValueRange::iterator::difference_type -> std::ptrdiff_t
+func zu::ValueRange::iterator::iterator() = default
+func zu::ValueRange::iterator::iterator(const Value *, std::uint64_t) noexcept
+using zu::ValueRange::iterator::iterator_category -> std::input_iterator_tag
+using zu::ValueRange::iterator::iterator_concept -> std::random_access_iterator_tag
+func zu::ValueRange::iterator::operator*() const -> Value
+friend zu::ValueRange::iterator::operator+(difference_type, iterator) noexcept -> iterator
+friend zu::ValueRange::iterator::operator+(iterator, difference_type) noexcept -> iterator
+func zu::ValueRange::iterator::operator++() noexcept -> iterator &
+func zu::ValueRange::iterator::operator++(int) noexcept -> iterator
+func zu::ValueRange::iterator::operator+=(difference_type) noexcept -> iterator &
+friend zu::ValueRange::iterator::operator-(const iterator &, const iterator &) noexcept -> difference_type
+friend zu::ValueRange::iterator::operator-(iterator, difference_type) noexcept -> iterator
+func zu::ValueRange::iterator::operator--() noexcept -> iterator &
+func zu::ValueRange::iterator::operator--(int) noexcept -> iterator
+func zu::ValueRange::iterator::operator-=(difference_type) noexcept -> iterator &
+friend zu::ValueRange::iterator::operator<=>(const iterator &, const iterator &) noexcept -> std::strong_ordering
+friend zu::ValueRange::iterator::operator==(const iterator &, const iterator &) noexcept -> bool
+func zu::ValueRange::iterator::operator[](difference_type) const -> Value
+using zu::ValueRange::iterator::reference -> Value
+using zu::ValueRange::iterator::value_type -> Value
+func zu::abi_version() -> std::string_view
+using zu::expected<class T> -> std::expected< T, Error >
+func zu::to_string(Node) -> std::string
+func zu::to_string(Position) -> std::string
+func zu::to_string(Rel) -> std::string
+func zu::to_string(Severity) noexcept -> std::string_view
+func zu::to_string(Status) noexcept -> std::string_view
+func zu::to_string(Temporal) -> std::string
+func zu::to_string(TemporalKind) noexcept -> std::string_view
+func zu::to_string(Type) noexcept -> std::string_view
+func zu::to_string(const Error &) -> std::string
+func zu::to_string(const Value &) -> std::string
+func zu::version() -> std::string_view

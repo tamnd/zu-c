@@ -299,6 +299,18 @@ jobs:
       - name: Every type the header declares has a page and no member is bare
         run: ctest --test-dir build -R reference --output-on-failure
 
+      # The rules the surface gate rests on, before the gate that rests
+      # on them. These need neither Doxygen nor the header, and they run
+      # first because a wrong rule makes the gate below pass rather than
+      # fail, which is the failure that would not be reported.
+      - name: What identifies a declaration, and what is only its shape
+        run: ctest --test-dir build -R surface-cases --output-on-failure
+
+      # api/surface.txt is a reviewed file. This is what tells a
+      # reviewer it should have been in the diff.
+      - name: The published surface is still what api/surface.txt says
+        run: ctest --test-dir build -R '^surface$' --output-on-failure
+
       # So that a reviewer can read the page a change to a comment
       # produced rather than take the diff's word for it.
       - uses: actions/upload-artifact@v4
