@@ -1,0 +1,151 @@
+name: Install
+
+# What a person with nothing on their machine gets.
+#
+# CI runs on a machine that has everything: a compiler, a linker, CMake
+# that lukka/get-cmake put there, a Rust toolchain, and whatever the last
+# job left in a cache. It cannot tell you whether this kit installs,
+# because it never installs it from outside its own build tree. This job
+# does, in a container holding the language runtime and nothing else, and
+# it does it every night rather than on every push, because what breaks
+# an install is usually somebody else's release and not a commit here.
+#
+# The engine arrives as an SDK laid out on disk rather than off a release
+# page, because there is no release yet. The shape is the shape a user
+# gets: include/zu.h and lib/libzu.so, which is what an archive unpacks
+# to and what ZU_ROOT means. What the layout leaves out is the download
+# and the signature, and those arrive on the day the first tag does.
+#
+# Read scripts/install.sh. Everything the job decides is decided there.
+
+on:
+  schedule:
+    # Late enough that a base image published during the day is in it.
+    - cron: "31 4 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - README.md
+      - CMakeLists.txt
+      - "cmake/**"
+      - "include/**"
+      - "scripts/install.sh"
+      - ".github/workflows/install.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # A C++ toolchain image, given CMake. This is most of the
+          # people who would install this: they have a compiler in a
+          # container and they add the build system.
+          - name: a gcc image, given cmake
+            image: gcc:15-bookworm
+            mode: cmake
+            absent: rustc cargo doxygen
+            setup: "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cmake >/dev/null"
+
+          # A bare machine, given a compiler and a build system and
+          # nothing else. This is the row where the absent list means
+          # something, because everything on it had to be listed.
+          - name: a bare machine, given a compiler and cmake
+            image: debian:13-slim
+            mode: cmake
+            absent: rustc cargo doxygen git python3 pkg-config
+            setup: "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends g++ cmake make libc6-dev >/dev/null"
+
+          # And the claim the README makes for a project that would
+          # rather not use CMake: the wrapper is header only, so it needs
+          # the include path and nothing else. Checked on an image with
+          # no CMake on it at all, which is the only way that claim can
+          # be checked honestly.
+          - name: a bare machine with no cmake at all
+            image: debian:13-slim
+            mode: header
+            absent: rustc cargo doxygen git python3 pkg-config cmake make
+            setup: "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends g++ libc6-dev >/dev/null"
+
+    name: ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/checkout@v5
+        with:
+          repository: tamnd/zu
+          path: engine
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - name: Build libzu
+        working-directory: engine
+        run: cargo build --release -p zu-capi
+
+      # The release that does not exist yet, stood up on disk, in the
+      # layout ZU_ROOT documents. Read only inside the container, so an
+      # install cannot write back into the thing it is installing from.
+      - name: An SDK holding this engine
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/sdk/include" "$RUNNER_TEMP/sdk/lib"
+          cp engine/crates/zu-capi/include/zu.h "$RUNNER_TEMP/sdk/include/"
+          cp engine/target/release/libzu.so "$RUNNER_TEMP/sdk/lib/"
+
+      # /app is a directory inside the container and not a mount, so
+      # every run starts empty and nothing root wrote is left behind for
+      # the runner to trip over.
+      - name: Install and run both programs on the page
+        run: |
+          docker run --rm \
+            -v "$PWD:/src:ro" \
+            -v "$RUNNER_TEMP/sdk:/sdk:ro" \
+            -e SRC=/src -e SDK=/sdk -e APP=/app \
+            -e MODE="${{ matrix.mode }}" \
+            -e ABSENT="${{ matrix.absent }}" \
+            "${{ matrix.image }}" \
+            sh -c "${{ matrix.setup }} && /src/scripts/install.sh"
+
+      # The failures the job is meant to catch, caught. A job that only
+      # ever passes is a job nobody has seen fail, and the failure that
+      # matters here is the one where the compiler found a header or the
+      # linker found a library that the install did not put there. Take
+      # each piece out of the install and the build has to stop; if it
+      # does not, then something on the image was used instead and every
+      # pass above meant nothing.
+      #
+      # The package row is skipped where there is no package, which is
+      # the row that installs a header by copying it.
+      - name: The failures the job is meant to catch, caught
+        run: |
+          set -eu
+          breaks="header sdk"
+          if [ "${{ matrix.mode }}" = cmake ]; then
+            breaks="header package sdk"
+          fi
+          for what in $breaks; do
+            echo "=== without the $what"
+            set +e
+            docker run --rm \
+              -v "$PWD:/src:ro" \
+              -v "$RUNNER_TEMP/sdk:/sdk:ro" \
+              -e SRC=/src -e SDK=/sdk -e APP=/app \
+              -e MODE="${{ matrix.mode }}" \
+              -e ABSENT="${{ matrix.absent }}" \
+              -e BREAK="$what" \
+              "${{ matrix.image }}" \
+              sh -c "${{ matrix.setup }} && /src/scripts/install.sh" >/dev/null 2>&1
+            status=$?
+            set -e
+            test $status -ne 0 || {
+              echo "the install worked without the $what in it"
+              exit 1
+            }
+          done
