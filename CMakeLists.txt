@@ -47,6 +47,11 @@ endif()
 option(ZU_CPP_TESTS "Build the test suite" ${ZU_CPP_TOP_LEVEL})
 option(ZU_CPP_EXAMPLES "Build the examples" ${ZU_CPP_TOP_LEVEL})
 option(ZU_CPP_BENCH "Build the benchmarks" ${ZU_CPP_TOP_LEVEL})
+# Off even at top level, unlike the three above. Doxygen is not needed
+# to build this header or to use it, and a contributor who has a
+# compiler and nothing else should be able to configure the repository
+# and run the suite. CI turns it on, and so does the release.
+option(ZU_CPP_DOCS "Build the API reference, which needs Doxygen" OFF)
 option(ZU_CPP_WERROR "Treat warnings as errors in this repository's own code" OFF)
 set(ZU_CPP_SANITIZE "" CACHE STRING "Sanitizers to build the suite with, for example address,undefined")
 
@@ -122,8 +127,13 @@ endif()
 
 # ---- the suite, the examples, the benchmarks ----
 
-if(TARGET zu::zu AND ZU_CPP_TESTS)
+# Here rather than beside add_subdirectory(test), because the reference
+# is graded by ctest too and it needs no engine to be graded.
+if(ZU_CPP_TESTS)
   enable_testing()
+endif()
+
+if(TARGET zu::zu AND ZU_CPP_TESTS)
   add_subdirectory(test)
   # The front page is code too, and it was the only code here that
   # nothing compiled. It is read out of README.md at configure time, so
@@ -137,6 +147,12 @@ endif()
 
 if(TARGET zu::zu AND ZU_CPP_BENCH)
   add_subdirectory(bench)
+endif()
+
+# No engine on this one. The reference is about the header, and the
+# header is what this repository has whether an engine was found or not.
+if(ZU_CPP_DOCS)
+  add_subdirectory(docs)
 endif()
 
 # ---- installing ----

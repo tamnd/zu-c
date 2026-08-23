@@ -106,6 +106,7 @@ lynn
 - `readme/`, which lifts the two programs above off this page, builds them, runs them and diffs what they print against the blocks under them. The page is the code most people read and the code least often run, and it is the only code here that had nothing compiling it.
 - `bench/`, the numbers below, with a timing harness that needs no package manager to run.
 - `cmake/`, `find_package(Zu)` to find the engine and `find_package(zu-cpp)` to find this. vcpkg, Conan and pkg-config packaging come with the first release.
+- `docs/`, the API reference, generated from `include/zu.hpp` and published with the release rather than checked in beside the source. `docs/reference.py` is the part worth reading: Doxygen exits 0 on a header it extracted nothing from, so the check counts the types the header declares and fails when the reference does not have them, which is what an empty reference looks like from the outside.
 
 Four sanitizer jobs run over the suite, because an ABI nine languages depend on should fail loudly rather than corrupt quietly. The whole tree runs under ASan and UBSan; `test/misuse.c` runs again with leak detection on, which it can and the C++ files cannot, because it is the file that gives every handle back by hand; `test/threads.c` runs under TSan; and both C files run under valgrind, which sees what the sanitizers cannot, since libzu is compiled without instrumentation and memcheck does not need any. `test/tsan.supp` records what TSan is unable to be told about a library that takes no pthread lock, and why the reports from inside the engine are dropped rather than read.
 
@@ -120,6 +121,15 @@ ctest --test-dir build --output-on-failure
 ```
 
 A checkout with no engine beside it still configures and installs the header, and skips the suite, because a header-only library compiles against a header. `cmake --build build --target bench` builds the benchmarks, which ctest does not run: a timing number produced on a machine that is also running a compile is not a number.
+
+The reference is off by default, because Doxygen is not needed to build this header or to use it.
+
+```
+cmake -B build -DZU_CPP_DOCS=ON
+cmake --build build --target docs
+```
+
+No engine is needed for that one either.
 
 The wrapper is header-only, so a project that would rather not use CMake needs the include path and nothing else.
 

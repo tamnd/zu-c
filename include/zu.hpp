@@ -1,4 +1,6 @@
-/* zu.hpp: the C++ wrapper over libzu.
+/** @file zu.hpp
+ *
+ * The C++ wrapper over libzu.
  *
  * Header only, and additive. It includes zu.h and calls nothing else, so
  * a translation unit that already speaks the C API keeps speaking it and
@@ -94,6 +96,10 @@
 
 #if __cpp_lib_expected >= 202202L
 #include <expected>
+/** 1 when this toolchain has std::expected and the try_ half of the API
+ * is declared, 0 when it does not and only the throwing half is. Always
+ * defined, so it is read with \#if rather than \#ifdef, and a program
+ * that offers both spellings switches on it. */
 #define ZU_HAS_EXPECTED 1
 #else
 #define ZU_HAS_EXPECTED 0
@@ -101,6 +107,9 @@
 
 #if defined(__cpp_lib_format) && __cpp_lib_format >= 201907L
 #include <format>
+/** 1 when this toolchain has std::format and the formatters at the foot
+ * of this header are defined, 0 when it does not. to_string is there
+ * either way and is what the formatters are written over. */
 #define ZU_HAS_FORMAT 1
 #else
 #define ZU_HAS_FORMAT 0
@@ -110,7 +119,7 @@ namespace zu {
 
 /* ---- what a call answered ---- */
 
-/* The zu_status values, as an enum class so that a status cannot be
+/** The zu_status values, as an enum class so that a status cannot be
  * compared with a row count by accident. The numbers are the ABI's and
  * are fixed. */
 enum class Status : int {
@@ -127,7 +136,7 @@ enum class Status : int {
   io = ZU_IO,
 };
 
-/* How bad a diagnostic is. A warning rides along with a result; an
+/** How bad a diagnostic is. A warning rides along with a result; an
  * exception replaces one. */
 enum class Severity : int {
   success = ZU_SEVERITY_SUCCESS,
@@ -137,7 +146,7 @@ enum class Severity : int {
   exception = ZU_SEVERITY_EXCEPTION,
 };
 
-/* What a cell holds. */
+/** What a cell holds. */
 enum class Type : int {
   null = ZU_TYPE_NULL,
   boolean = ZU_TYPE_BOOL,
@@ -152,13 +161,13 @@ enum class Type : int {
   record = ZU_TYPE_RECORD,
   graph = ZU_TYPE_GRAPH,
   binding_table = ZU_TYPE_BINDING_TABLE,
-  /* Octets rather than text, so nothing here is validated as UTF-8 and
+  /** Octets rather than text, so nothing here is validated as UTF-8 and
    * nothing is decoded on the way out. Last in the list because the
    * order is the ABI's numbering and this is what ABI 0.14 added. */
   bytes = ZU_TYPE_BYTES,
 };
 
-/* Which temporal a temporal is. The unit follows the kind: days for a
+/** Which temporal a temporal is. The unit follows the kind: days for a
  * date, months for a year-month duration, nanoseconds for the other
  * five. */
 enum class TemporalKind : int {
@@ -169,42 +178,54 @@ enum class TemporalKind : int {
   zoned_datetime = ZU_TEMPORAL_ZONED_DATETIME,
   duration_year_month = ZU_TEMPORAL_DURATION_YEAR_MONTH,
   duration_day_time = ZU_TEMPORAL_DURATION_DAY_TIME,
-  /* Not a temporal at all, which is what a frame column of plain
+  /** Not a temporal at all, which is what a frame column of plain
    * numbers passes. */
   plain = ZU_FRAME_PLAIN,
 };
 
-/* Where in a statement something happened. Line and column are 1-based
+/** Where in a statement something happened. Line and column are 1-based
  * and the column counts characters, so a line of multi-byte text does
  * not read as wider than it looks. The offset is a 0-based byte index
  * into the statement and is always on a character boundary. */
 struct Position {
+  /** The line the place is on, counting from one. */
   std::uint32_t line = 0;
+  /** The character within that line, counting from one. */
   std::uint32_t column = 0;
+  /** The same place counted in bytes from the start of the statement,
+   * from zero. */
   std::uint32_t offset = 0;
 
+  /** Two positions are the same place when all three agree. */
   friend bool operator==(const Position&, const Position&) = default;
 };
 
-/* A node is a table and a row of it. Neither half identifies one on its
+/** A node is a table and a row of it. Neither half identifies one on its
  * own, because two tables number their rows from zero. */
 struct Node {
+  /** Which node table, by the id the catalog gave it. */
   std::uint32_t table = 0;
+  /** Which row of that table, counting from zero. */
   std::uint64_t offset = 0;
 
+  /** The same table and the same row is the same node. */
   friend bool operator==(const Node&, const Node&) = default;
 };
 
-/* An edge is a table and the two rows it runs between. */
+/** An edge is a table and the two rows it runs between. */
 struct Rel {
+  /** Which edge table, by the id the catalog gave it. */
   std::uint32_t table = 0;
+  /** The row the edge runs from. */
   std::uint64_t src = 0;
+  /** The row the edge runs to. */
   std::uint64_t dst = 0;
 
+  /** The same table between the same two rows is the same edge. */
   friend bool operator==(const Rel&, const Rel&) = default;
 };
 
-/* A temporal value, which is a kind and a count in the unit that kind
+/** A temporal value, which is a kind and a count in the unit that kind
  * implies. The offset is minutes east of UTC and is nought for the five
  * kinds that carry none.
  *
@@ -216,12 +237,24 @@ struct Rel {
  * conversion each kind does have, and a caller who wants the others
  * writes the arithmetic where the meaning is known. */
 struct Temporal {
+  /** Which of the seven this is, and so what unit the count is in. */
   TemporalKind kind = TemporalKind::date;
+  /** How many of that unit, from the epoch for a point in time and from
+   * nothing for a duration. */
   std::int64_t count = 0;
+  /** Minutes east of UTC, and nought for the kinds that carry none. */
   std::int32_t offset = 0;
 
+  /** Two temporals are equal when the kind, the count and the offset
+   * all agree, which means the same instant written in two zones is
+   * two values rather than one. */
   friend bool operator==(const Temporal&, const Temporal&) = default;
 
+  ///@{
+  /** One of these per kind, because chrono has no single type these
+   * seven map onto and a constructor taking a count and a kind is the
+   * one a caller gets backwards. Each names the kind it builds and
+   * takes the chrono type that kind is actually written in. */
   static Temporal date(std::chrono::sys_days d) {
     return {TemporalKind::date, d.time_since_epoch().count(), 0};
   }
@@ -249,10 +282,15 @@ struct Temporal {
   static Temporal nanos(std::chrono::nanoseconds d) {
     return {TemporalKind::duration_day_time, d.count(), 0};
   }
+  ///@}
 
-  /* The count as the chrono type its kind means it in. Reading one as
+  ///@{
+  /** The count as the chrono type its kind means it in. Reading one as
    * the wrong kind is a caller's mistake and not a thing this can
-   * check, so each is named for the unit rather than for the kind. */
+   * check, so each is named for the unit rather than for the kind. The
+   * offset is not folded in: east() reads it, and what to do with it is
+   * the caller's, because a zoned time and a zoned datetime want
+   * different things done with the same number. */
   std::chrono::sys_days as_days() const {
     return std::chrono::sys_days{std::chrono::days{count}};
   }
@@ -262,11 +300,12 @@ struct Temporal {
     return std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{count}};
   }
   std::chrono::minutes east() const { return std::chrono::minutes{offset}; }
+  ///@}
 };
 
 /* ---- errors ---- */
 
-/* Everything a failure has to say, read out of the zu_error before it
+/** Everything a failure has to say, read out of the zu_error before it
  * was freed.
  *
  * The strings are copies rather than views, and they have to be: the
@@ -283,7 +322,7 @@ class Error {
  public:
   Error() = default;
 
-  /* Reads e and frees it. Safe on a null e, which is what a structural
+  /** Reads e and frees it. Safe on a null e, which is what a structural
    * failure hands over: the status is then the whole of what happened
    * and what names the call. */
   static Error take(Status status, zu_error* e, std::string_view what = {}) {
@@ -320,34 +359,35 @@ class Error {
     return out;
   }
 
-  /* What the call answered, which is the shape of the failure as
+  /** What the call answered, which is the shape of the failure as
    * against the condition it raised. */
   Status status() const noexcept { return status_; }
 
-  /* zu's own account, naming the table, the token or the value. Never
+  /** zu's own account, naming the table, the token or the value. Never
    * empty, because a failure a caller can only print is still a failure
    * a caller has to print. */
   std::string_view message() const noexcept { return message_; }
 
-  /* The five-character GQLSTATUS code, "42001" for a syntax error.
+  /** The five-character GQLSTATUS code, "42001" for a syntax error.
    * Empty for the failures the standard has no condition for, an
    * interrupted statement among them. */
   std::optional<std::string_view> code() const noexcept { return view(code_); }
 
-  /* The standard's own words for the condition class and subclass,
+  /** The standard's own words for the condition class and subclass,
    * which is what a conformance harness grades. */
   std::optional<std::string_view> condition() const noexcept { return view(condition_); }
 
-  /* Where the condition is written up, so a reader is handed a page
+  /** Where the condition is written up, so a reader is handed a page
    * rather than five characters to search for. */
   std::optional<std::string_view> doc_url() const noexcept { return view(doc_url_); }
 
-  /* The line the position is on, without its newline, which the column
+  /** The line the position is on, without its newline, which the column
    * counts characters into. Both halves of a caret without having kept
    * the statement text. */
   std::optional<std::string_view> excerpt() const noexcept { return view(excerpt_); }
 
-  /* What the condition is about, as a kind and a name: "variable" and
+  ///@{
+  /** What the condition is about, as a kind and a name: "variable" and
    * "nope", "function" and "nosuchfn". This is the pair a tool acts on
    * rather than prints, because a name in a sentence has to be parsed
    * back out of it and a name here does not. An editor underlines the
@@ -358,24 +398,34 @@ class Error {
    * division by zero among them. */
   std::optional<std::string_view> subject_kind() const noexcept { return view(subject_kind_); }
   std::optional<std::string_view> subject() const noexcept { return view(subject_); }
+  ///@}
 
-  /* Where the statement was running, which a host with more than one
+  ///@{
+  /** Where the statement was running, which a host with more than one
    * graph open needs in order to say which one refused it. */
   std::optional<std::string_view> graph() const noexcept { return view(graph_); }
   std::optional<std::string_view> schema() const noexcept { return view(schema_); }
+  ///@}
 
+  /** How bad it is. Everything thrown is an exception; a warning rides
+   * along with a result and reaches a caller through notices rather
+   * than through a throw. */
   Severity severity() const noexcept { return severity_; }
 
-  /* True when running the same statement again could succeed. A write
+  /** True when running the same statement again could succeed. A write
    * that lost to a concurrent one is the case: nothing of it was
    * applied. A retry loop reads this rather than carrying a list of
    * codes, which is the sort of list that is right in one binding and
    * stale in the others. */
   bool retryable() const noexcept { return retryable_; }
 
+  /** Where in the statement it happened, when the condition has a token
+   * to point at. Empty rather than nought for the ones that do not,
+   * because a made up position underlines the wrong word rather than
+   * none. */
   std::optional<Position> position() const noexcept { return position_; }
 
-  /* The whole report, which is the message and, where there is one, the
+  /** The whole report, which is the message and, where there is one, the
    * excerpt with a caret under the column. Two lines rather than one,
    * for a program that prints a failure to somebody who has to fix the
    * statement. */
@@ -466,7 +516,7 @@ class Error {
   std::optional<Position> position_;
 };
 
-/* The base of the exception hierarchy. There is one subclass per
+/** The base of the exception hierarchy. There is one subclass per
  * GQLSTATUS condition class, which is what the two characters that open
  * a code are for: catching DataError catches every one of the
  * conditions in class 22 without listing them, and a condition zu adds
@@ -475,67 +525,78 @@ class Error {
  * what() is the message. The rest is on error(). */
 class Exception : public std::runtime_error {
  public:
+  /** Takes the failure, and hands its message to std::runtime_error so
+   * that a catch site that only knows about the standard library still
+   * prints something worth reading from what(). */
   explicit Exception(Error e)
       : std::runtime_error(std::string(e.message())), error_(std::move(e)) {}
 
+  /** The whole of the failure: the code, the condition, the position,
+   * the subject. what() is the message alone, which is a sentence and
+   * not a thing to act on. */
   const Error& error() const noexcept { return error_; }
+
+  ///@{
+  /** The three fields a catch site reads often enough to be worth
+   * reaching without going through error() first. */
   Status status() const noexcept { return error_.status(); }
   std::optional<std::string_view> code() const noexcept { return error_.code(); }
   bool retryable() const noexcept { return error_.retryable(); }
+  ///@}
 
  private:
   Error error_;
 };
 
-/* Class 08: the database could not be reached, or the operating system
+/** Class 08: the database could not be reached, or the operating system
  * refused a read or a write. */
 class ConnectionError : public Exception {
  public:
   using Exception::Exception;
 };
-/* Class 22: the data. A value out of range, a cast that will not go, a
+/** Class 22: the data. A value out of range, a cast that will not go, a
  * division by zero. */
 class DataError : public Exception {
  public:
   using Exception::Exception;
 };
-/* Classes 25, 2D and 40, and a write that lost to a concurrent one:
+/** Classes 25, 2D and 40, and a write that lost to a concurrent one:
  * everything about a transaction. */
 class TransactionError : public Exception {
  public:
   using Exception::Exception;
 };
-/* Class 42: the statement did not parse, or named something that is not
+/** Class 42: the statement did not parse, or named something that is not
  * there. */
 class SyntaxError : public Exception {
  public:
   using Exception::Exception;
 };
-/* The contract in zu.h was broken. An index out of range, an accessor
+/** The contract in zu.h was broken. An index out of range, an accessor
  * asked for a column that does not hold what it reads. Nothing is wrong
  * with the database and the call did nothing. */
 class ProgrammingError : public Exception {
  public:
   using Exception::Exception;
 };
-/* Two threads used one connection at once. Connect again rather than
+/** Two threads used one connection at once. Connect again rather than
  * share. */
 class ConcurrentError : public ProgrammingError {
  public:
   using ProgrammingError::ProgrammingError;
 };
-/* A handle was used after its connection closed. */
+/** A handle was used after its connection closed. */
 class ClosedError : public ProgrammingError {
  public:
   using ProgrammingError::ProgrammingError;
 };
-/* The caller stopped the statement. Nothing failed so much as stopped,
+/** The caller stopped the statement. Nothing failed so much as stopped,
  * and the connection runs the next statement normally. */
 class InterruptedError : public Exception {
  public:
   using Exception::Exception;
 };
-/* Everything else, which is the engine having gone wrong rather than
+/** Everything else, which is the engine having gone wrong rather than
  * the caller. */
 class InternalError : public Exception {
  public:
@@ -577,7 +638,7 @@ namespace detail {
   }
 }
 
-/* What every operation in this header is written as. One of these is a
+/** What every operation in this header is written as. One of these is a
  * value or a failure, and the two public spellings are each one line
  * over it, which is what keeps them from disagreeing. void is carried
  * as monostate rather than specialised, because a specialisation would
@@ -612,7 +673,7 @@ inline void unwrap_void(Outcome<Nothing>&& o) {
   }
 }
 
-/* Any range of anything a string_view can be made from, which covers a
+/** Any range of anything a string_view can be made from, which covers a
  * vector of std::string, one of string_view, and an array of literals.
  * The two bulk paths that take strings take one of these rather than a
  * span of views, because a host holding strings should not have to
@@ -621,7 +682,7 @@ template <class R>
 concept StringRange = std::ranges::input_range<R> &&
                       std::convertible_to<std::ranges::range_reference_t<R>, std::string_view>;
 
-/* A contiguous range of numbers, which is what a frame column is over.
+/** A contiguous range of numbers, which is what a frame column is over.
  * bool is out because a C++ vector of them is a bitfield with no array
  * behind it, and a frame takes Arrow's bitmap through its own call. */
 template <class R>
@@ -643,7 +704,7 @@ std::vector<std::string_view> to_views(const R& r) {
   return out;
 }
 
-/* Every handle in zu.h, closed on the way out of scope. Move only:
+/** Every handle in zu.h, closed on the way out of scope. Move only:
  * copying one would be two frees of one pointer, and there is no call
  * in the C API that duplicates a handle for us. */
 template <class T, void (*Free)(T*)>
@@ -681,7 +742,7 @@ class Handle {
   T* p_ = nullptr;
 };
 
-/* The two shapes a fallible call comes in. A call with an error handle
+/** The two shapes a fallible call comes in. A call with an error handle
  * has something to say about why; a call without one is structural and
  * the status names it exactly, so the call's own name is the message.
  *
@@ -723,7 +784,7 @@ inline std::optional<Error> checked(zu_status st, std::string_view what) {
 }  // namespace detail
 
 #if ZU_HAS_EXPECTED
-/* What every try_ call answers. */
+/** What every try_ call answers. */
 template <class T>
 using expected = std::expected<T, Error>;
 
@@ -744,22 +805,24 @@ inline expected<void> to_expected_void(Outcome<Nothing>&& o) {
 }  // namespace detail
 #endif
 
-/* What the loaded libzu calls itself, and the ABI this header was
+///@{
+/** What the loaded libzu calls itself, and the ABI this header was
  * written against. The two are not the same fact: a library and a
  * header that disagree about the ABI is what abi_version is for. */
 inline std::string_view version() { return zu_version(); }
 inline std::string_view abi_version() { return ZU_ABI_VERSION; }
+///@}
 
 /* ---- values ---- */
 
 class Value;
 
-/* A list, a path or a record, as a range over its elements. Cheap: it
+/** A list, a path or a record, as a range over its elements. Cheap: it
  * holds the parent value and an index, and every element is read out of
  * the result where it lies. */
 class ValueRange;
 
-/* One cell, borrowed from the result that produced it. Nothing to free,
+/** One cell, borrowed from the result that produced it. Nothing to free,
  * and it lives exactly as long as that result does.
  *
  * These read a value as the type it is and nothing else, which is where
@@ -769,24 +832,40 @@ class ValueRange;
 class Value {
  public:
   Value() = default;
+  /** Borrows a cell the C API already handed out. Nothing is copied and
+   * nothing is owned, so the zu_value has to outlive this. */
   explicit Value(const zu_value* v) noexcept : v_(v) {}
 
+  ///@{
+  /** The handle underneath and whether there is one, for a caller who
+   * has to reach a zu_ call this header does not wrap. Reading through
+   * raw() is fine; freeing what it points at is not. */
   const zu_value* raw() const noexcept { return v_; }
   explicit operator bool() const noexcept { return v_ != nullptr; }
+  ///@}
 
+  /** What the cell holds, which is what says which of the readers below
+   * will answer. A cell with no value reads as Type::null. */
   Type type() const noexcept {
     const std::int32_t t = zu_value_type(v_);
     return t < 0 ? Type::null : static_cast<Type>(t);
   }
+  /** True when the cell holds nothing, which is not the same as holding
+   * an empty string or a zero. */
   bool is_null() const noexcept { return type() == Type::null; }
 
+  ///@{
+  /** Reads the cell as the type it is. Asking for another one throws
+   * ProgrammingError rather than converting: a column of integers read
+   * as text is a bug in the program and not something to paper over,
+   * and null is not any of these types either. */
   bool as_bool() const { return detail::unwrap(bool_impl()); }
   std::int64_t as_int() const { return detail::unwrap(int_impl()); }
   double as_double() const { return detail::unwrap(double_impl()); }
-  /* Points into the result's bytes and is NOT NUL-terminated, which is
+  /** Points into the result's bytes and is NOT NUL-terminated, which is
    * the price of not copying. */
   std::string_view as_string() const { return detail::unwrap(string_impl()); }
-  /* Octets, on the same terms: into the result, not copied, and not
+  /** Octets, on the same terms: into the result, not copied, and not
    * NUL-terminated. A byte string and a string are different types here
    * and reading one as the other fails, because a blob that happens to
    * be valid UTF-8 is still a blob and a caller who wanted text should
@@ -795,22 +874,36 @@ class Value {
   Temporal as_temporal() const { return detail::unwrap(temporal_impl()); }
   Node as_node() const { return detail::unwrap(node_impl()); }
   Rel as_rel() const { return detail::unwrap(rel_impl()); }
+  ///@}
 
-  /* How many elements a list, a path or a record has, and 0 for
+  ///@{
+  /** How many elements a list, a path or a record has, and 0 for
    * everything else, an empty list included. */
   std::uint64_t size() const noexcept { return zu_value_len(v_); }
   bool empty() const noexcept { return size() == 0; }
+  ///@}
 
+  ///@{
+  /** One element of a list, a path or a record, counting from zero. Out
+   * of range throws ProgrammingError, and so does asking a cell that is
+   * not one of those three for an element at all. */
   Value at(std::uint64_t i) const { return detail::unwrap(at_impl(i)); }
   Value operator[](std::uint64_t i) const { return at(i); }
+  ///@}
 
-  /* A record's field names, in name order, which is what makes two
+  /** A record's field names, in name order, which is what makes two
    * records written in different orders one value. */
   std::string_view field(std::uint64_t i) const { return detail::unwrap(field_impl(i)); }
 
+  /** The same elements as a range, for the loop and the view pipeline
+   * that at() spells out by hand. */
   inline ValueRange elements() const;
 
 #if ZU_HAS_EXPECTED
+  ///@{
+  /** The expected spelling. Each of these is the call of the same name
+   * above it, doing the same work through the same code, and answering
+   * a failure rather than throwing it. */
   [[nodiscard]] expected<bool> try_as_bool() const { return detail::to_expected(bool_impl()); }
   [[nodiscard]] expected<std::int64_t> try_as_int() const { return detail::to_expected(int_impl()); }
   [[nodiscard]] expected<double> try_as_double() const { return detail::to_expected(double_impl()); }
@@ -825,6 +918,7 @@ class Value {
   [[nodiscard]] expected<std::string_view> try_field(std::uint64_t i) const {
     return detail::to_expected(field_impl(i));
   }
+  ///@}
 #endif
 
  private:
@@ -914,15 +1008,18 @@ class Value {
   const zu_value* v_ = nullptr;
 };
 
-/* The elements of a list, a path or a record, as a random access range.
+/** The elements of a list, a path or a record, as a random access range.
  * Random access rather than input, because a list is already in memory
  * and an iterator that had to walk it would be a promise this makes
  * about the engine that is not true. */
 class ValueRange : public std::ranges::view_interface<ValueRange> {
  public:
+  /** A random access iterator over the elements, holding the parent and
+   * an index and nothing else. */
   class iterator {
    public:
-    /* What comes back is made on dereference rather than stored, so it
+    ///@{
+    /** What comes back is made on dereference rather than stored, so it
      * is a value and not a reference. The concept is what the ranges
      * algorithms read and it is random access, because everything is
      * already in memory; the category stays input, because a legacy
@@ -933,15 +1030,25 @@ class ValueRange : public std::ranges::view_interface<ValueRange> {
     using value_type = Value;
     using difference_type = std::ptrdiff_t;
     using reference = Value;
+    ///@}
 
     iterator() = default;
+    /** The one the range's begin and end build. Nothing is owned and
+     * the parent has to outlive it. */
     iterator(const Value* parent, std::uint64_t i) noexcept : parent_(parent), i_(i) {}
 
+    ///@{
+    /** Reads the element, which is built here rather than pointed at. */
     Value operator*() const { return parent_->at(i_); }
     Value operator[](difference_type n) const {
       return parent_->at(static_cast<std::uint64_t>(static_cast<difference_type>(i_) + n));
     }
+    ///@}
 
+    ///@{
+    /** The random access protocol, which is arithmetic on the index.
+     * None of it reads the parent, so moving an iterator past the end
+     * is defined and dereferencing it there is not. */
     iterator& operator++() noexcept {
       ++i_;
       return *this;
@@ -975,6 +1082,7 @@ class ValueRange : public std::ranges::view_interface<ValueRange> {
     friend std::strong_ordering operator<=>(const iterator& a, const iterator& b) noexcept {
       return a.i_ <=> b.i_;
     }
+    ///@}
 
    private:
     const Value* parent_ = nullptr;
@@ -982,10 +1090,16 @@ class ValueRange : public std::ranges::view_interface<ValueRange> {
   };
 
   ValueRange() = default;
+  /** Built by Value::elements rather than by hand. It borrows the cell
+   * and has to be outlived by it. */
   explicit ValueRange(const Value* parent) noexcept : parent_(parent) {}
 
+  ///@{
+  /** The ends of the range. A default constructed ValueRange is empty
+   * rather than undefined, so a range over nothing loops zero times. */
   iterator begin() const noexcept { return {parent_, 0}; }
   iterator end() const noexcept { return {parent_, parent_ == nullptr ? 0 : parent_->size()}; }
+  ///@}
 
  private:
   const Value* parent_ = nullptr;
@@ -998,23 +1112,34 @@ inline ValueRange Value::elements() const { return ValueRange(this); }
 class Result;
 class Connection;
 
-/* One row of a result, which is the result and a row number rather than
+/** One row of a result, which is the result and a row number rather than
  * anything copied out of it. Cheap to make, cheap to pass, and good for
  * exactly as long as the result is. */
 class Row {
  public:
   Row() = default;
+  /** Built by the result rather than by hand. It borrows the result and
+   * has to be outlived by it. */
   Row(const Result* result, std::uint64_t row) noexcept : result_(result), row_(row) {}
 
+  /** Which row of the result this is, counting from zero. */
   std::uint64_t index() const noexcept { return row_; }
+  /** How many columns, which is the result's count and the same for
+   * every row. */
   inline std::uint32_t size() const noexcept;
 
+  ///@{
+  /** What a cell holds and whether it holds anything, by column number
+   * or by column name. A name nothing matches throws ProgrammingError
+   * rather than reading the first column. */
   inline Type type(std::uint32_t col) const;
   inline Type type(std::string_view name) const;
   inline bool is_null(std::uint32_t col) const;
   inline bool is_null(std::string_view name) const;
+  ///@}
 
-  /* One cell, as whatever T asks for.
+  ///@{
+  /** One cell, as whatever T asks for.
    *
    * int64_t, double, bool, Temporal, Node and Rel read the cell as the
    * type it is. string_view and string read a string, the first
@@ -1026,16 +1151,22 @@ class Row {
   T get(std::uint32_t col) const;
   template <class T>
   T get(std::string_view name) const;
+  ///@}
 
+  ///@{
+  /** The cell itself, untyped, for a caller who wants to ask it what it
+   * is rather than tell it. get<T> is the spelling to reach for when
+   * the type is known. */
   inline Value operator[](std::uint32_t col) const;
   inline Value operator[](std::string_view name) const;
+  ///@}
 
  private:
   const Result* result_ = nullptr;
   std::uint64_t row_ = 0;
 };
 
-/* A statement's answer, and everything that can be read out of it.
+/** A statement's answer, and everything that can be read out of it.
  *
  * It owns its rows outright, so it stays readable after the connection
  * that produced it has gone back to a pool. Every view it hands out,
@@ -1050,21 +1181,39 @@ class Row {
 class Result {
  public:
   Result() = default;
+  /** Adopts a zu_result and closes it at the end of the scope. The
+   * calls that answer a result hand one over already made; this is for
+   * a caller who got theirs from the C API directly. */
   explicit Result(zu_result* r) noexcept : h_(r) {}
 
+  ///@{
+  /** The handle underneath and whether there is one, for a caller who
+   * has to reach a zu_ call this header does not wrap. Reading through
+   * raw() is fine; closing what it points at is not, because the
+   * destructor will close it again. */
   zu_result* raw() const noexcept { return h_.get(); }
   explicit operator bool() const noexcept { return static_cast<bool>(h_); }
+  ///@}
 
+  ///@{
+  /** How many rows and how many columns. Both are counts the result
+   * already knows, so neither reads the data. */
   std::uint64_t rows() const noexcept { return zu_result_rows(h_.get()); }
   std::uint32_t cols() const noexcept { return zu_result_cols(h_.get()); }
-  /* The range spelling of the same count, so that the standard
+  ///@}
+
+  ///@{
+  /** The range spelling of the same count, so that the standard
    * algorithms and views see a sized range. */
   std::uint64_t size() const noexcept { return rows(); }
   bool empty() const noexcept { return rows() == 0; }
+  ///@}
 
+  /** What a column is called, borrowed from the result. Out of range
+   * throws ProgrammingError. */
   std::string_view name(std::uint32_t col) const { return detail::unwrap(name_impl(col)); }
 
-  /* Which column that name is, or nothing. The names are read once and
+  /** Which column that name is, or nothing. The names are read once and
    * kept, because a program that reads a column by name reads it once a
    * row and a linear walk of the C API per read would be the cost this
    * wrapper was supposed to save. */
@@ -1078,12 +1227,15 @@ class Result {
     return std::nullopt;
   }
 
-  /* The same, and a failure naming what was asked for when there is no
+  /** The same, and a failure naming what was asked for when there is no
    * such column, which is the mistake a caller actually makes. */
   std::uint32_t column(std::string_view name) const {
     return detail::unwrap(column_impl(name));
   }
 
+  /** Every column name in order, read once and kept. This is what find
+   * and column walk, so a program that reads by name pays for the walk
+   * of the C API once per result rather than once per read. */
   const std::vector<std::string_view>& names() const {
     if (!named_) {
       const std::uint32_t n = cols();
@@ -1096,11 +1248,15 @@ class Result {
     return names_;
   }
 
+  /** What one cell holds. A column is not one type in general, because
+   * a null is a type of its own and an expression may answer different
+   * things on different rows. */
   Type type(std::uint64_t row, std::uint32_t col) const {
     return detail::unwrap(type_impl(row, col));
   }
 
-  /* The whole column in one call, over the engine's own buffer.
+  ///@{
+  /** The whole column in one call, over the engine's own buffer.
    *
    * ints reads integers and booleans, doubles reads floats and
    * integers, and node_offsets reads the row offset that identifies a
@@ -1120,28 +1276,37 @@ class Result {
   std::span<const std::uint64_t> node_offsets(std::uint32_t col) const {
     return detail::unwrap(node_offsets_impl(col));
   }
-  /* One byte a row, nonzero where the cell is not null. */
+  ///@}
+
+  /** One byte a row, nonzero where the cell is not null. */
   std::span<const std::uint8_t> valid(std::uint32_t col) const {
     return detail::unwrap(valid_impl(col));
   }
 
+  ///@{
+  /** The same four columnar reads, by column name. Each is the numbered
+   * one with column() in front of it, so a name nothing matches is a
+   * failure rather than a read of column nought. */
   std::span<const std::int64_t> ints(std::string_view name) const { return ints(column(name)); }
   std::span<const double> doubles(std::string_view name) const { return doubles(column(name)); }
   std::span<const std::uint64_t> node_offsets(std::string_view name) const {
     return node_offsets(column(name));
   }
   std::span<const std::uint8_t> valid(std::string_view name) const { return valid(column(name)); }
+  ///@}
 
-  /* One string cell, NUL-terminated and borrowed from the result. */
+  /** One string cell, NUL-terminated and borrowed from the result. */
   std::string_view str(std::uint64_t row, std::uint32_t col) const {
     return detail::unwrap(str_impl(row, col));
   }
 
+  /** One cell, untyped, borrowed from the result. This is the reader
+   * for the shapes a span cannot hold: a list, a path, a record. */
   Value cell(std::uint64_t row, std::uint32_t col) const {
     return detail::unwrap(cell_impl(row, col));
   }
 
-  /* The completion condition, "00000" for a statement that answered
+  /** The completion condition, "00000" for a statement that answered
    * with columns and "00001" for one that had none to give back. Never
    * empty. */
   std::string_view gqlstatus() const {
@@ -1150,7 +1315,8 @@ class Result {
     return std::string_view(p == nullptr ? "" : p, p == nullptr ? 0 : len);
   }
 
-  /* The conditions the statement raised and carried on through. Almost
+  ///@{
+  /** The conditions the statement raised and carried on through. Almost
    * every statement raises none, so a caller that asks and finds nought
    * has paid for one call. */
   std::uint32_t notice_count() const { return zu_result_notices(h_.get()); }
@@ -1167,6 +1333,7 @@ class Result {
     }
     return out;
   }
+  ///@}
 
   /* ---- chunks ----
    *
@@ -1179,13 +1346,29 @@ class Result {
    * That is the trade: a chunk span is good until the next call for the
    * same column and the same accessor, which may replace its contents,
    * or until the result is destroyed. */
+  /** Where one chunk sits in the result: the row it starts at and how
+   * many rows it holds. */
   struct ChunkExtent {
+    /** The row this chunk starts at, counting from zero in the whole
+     * result rather than in the chunk. */
     std::uint64_t offset = 0;
+    /** How many rows are in it. The last chunk is usually short. */
     std::uint64_t rows = 0;
   };
 
+  ///@{
+  /** How many chunks there are and where each one sits. A result with
+   * no rows has no chunks, and an index past the end is a failure
+   * rather than an empty extent. */
   std::uint64_t chunk_count() const noexcept { return zu_result_chunk_count(h_.get()); }
   ChunkExtent chunk(std::uint64_t i) const { return detail::unwrap(chunk_impl(i)); }
+  ///@}
+
+  ///@{
+  /** The columnar reads again, one chunk at a time rather than the
+   * whole column. Each span covers that chunk's rows and is good until
+   * the next call for the same column and the same accessor, or until
+   * the result is destroyed. */
   std::span<const std::int64_t> chunk_ints(std::uint64_t chunk, std::uint32_t col) const {
     return detail::unwrap(chunk_ints_impl(chunk, col));
   }
@@ -1198,12 +1381,16 @@ class Result {
   std::span<const std::uint8_t> chunk_valid(std::uint64_t chunk, std::uint32_t col) const {
     return detail::unwrap(chunk_valid_impl(chunk, col));
   }
+  ///@}
 
   /* ---- rows as a range ---- */
 
+  /** A random access iterator over the rows, holding the result and a
+   * row number and nothing else. */
   class iterator {
    public:
-    /* What comes back is made on dereference rather than stored, so it
+    ///@{
+    /** What comes back is made on dereference rather than stored, so it
      * is a value and not a reference. The concept is what the ranges
      * algorithms read and it is random access, because everything is
      * already in memory; the category stays input, because a legacy
@@ -1214,15 +1401,25 @@ class Result {
     using value_type = Row;
     using difference_type = std::ptrdiff_t;
     using reference = Row;
+    ///@}
 
     iterator() = default;
+    /** The one the result's begin and end build. Nothing is owned and
+     * the result has to outlive it. */
     iterator(const Result* result, std::uint64_t row) noexcept : result_(result), row_(row) {}
 
+    ///@{
+    /** Reads the row, which is built here rather than pointed at. */
     Row operator*() const noexcept { return Row(result_, row_); }
     Row operator[](difference_type n) const noexcept {
       return Row(result_, static_cast<std::uint64_t>(static_cast<difference_type>(row_) + n));
     }
+    ///@}
 
+    ///@{
+    /** The random access protocol, which is arithmetic on the row
+     * number. None of it reads the result, so moving an iterator past
+     * the end is defined and dereferencing it there is not. */
     iterator& operator++() noexcept {
       ++row_;
       return *this;
@@ -1258,19 +1455,27 @@ class Result {
     friend std::strong_ordering operator<=>(const iterator& a, const iterator& b) noexcept {
       return a.row_ <=> b.row_;
     }
+    ///@}
 
    private:
     const Result* result_ = nullptr;
     std::uint64_t row_ = 0;
   };
 
+  ///@{
+  /** The ends of the range, and one row by number. Every one of them
+   * borrows the result, which is why a Result is not a borrowed_range:
+   * a view built over a temporary result would outlive the rows it
+   * reads, and the standard is told so rather than trusted not to. */
   iterator begin() const noexcept { return {this, 0}; }
   iterator end() const noexcept { return {this, rows()}; }
   Row row(std::uint64_t i) const noexcept { return Row(this, i); }
+  ///@}
 
-  /* ---- arrow ----
-   *
-   * The other way a result ends. Every call above reads it and leaves
+  /* ---- arrow ---- */
+
+  ///@{
+  /** The other way a result ends. Every call above reads it and leaves
    * it whole; this hands its buffers to an Arrow consumer and gives the
    * result up, which is what makes it free rather than a copy of the
    * whole answer.
@@ -1283,8 +1488,13 @@ class Result {
   inline void to_arrow(Connection& conn, ArrowArrayStream* out,
                        std::uint64_t rows_per_batch = 0) &&;
   inline void to_arrow(ArrowArrayStream* out, std::uint64_t rows_per_batch = 0) &&;
+  ///@}
 
 #if ZU_HAS_EXPECTED
+  ///@{
+  /** The expected spelling. Each of these is the call of the same name
+   * above it, doing the same work through the same code, and answering
+   * a failure rather than throwing it. */
   [[nodiscard]] expected<std::string_view> try_name(std::uint32_t col) const {
     return detail::to_expected(name_impl(col));
   }
@@ -1333,6 +1543,7 @@ class Result {
   }
   [[nodiscard]] inline expected<void> try_to_arrow(Connection& conn, ArrowArrayStream* out,
                                      std::uint64_t rows_per_batch = 0) &&;
+  ///@}
 #endif
 
  private:
@@ -1546,7 +1757,7 @@ T Row::get(std::string_view name) const {
 
 /* ---- statements ---- */
 
-/* A prepared statement. Bindings live on it and survive execute, so a
+/** A prepared statement. Bindings live on it and survive execute, so a
  * loop rebinds only what changed, and binding a name again replaces its
  * value.
  *
@@ -1555,11 +1766,24 @@ T Row::get(std::string_view name) const {
 class Statement {
  public:
   Statement() = default;
+  /** Adopts a zu_stmt and closes it at the end of the scope.
+   * Connection::prepare hands one over already made. */
   explicit Statement(zu_stmt* s) noexcept : h_(s) {}
 
+  ///@{
+  /** The handle underneath and whether there is one, for a caller who
+   * has to reach a zu_ call this header does not wrap. Reading through
+   * raw() is fine; closing what it points at is not. */
   zu_stmt* raw() const noexcept { return h_.get(); }
   explicit operator bool() const noexcept { return static_cast<bool>(h_); }
+  ///@}
 
+  ///@{
+  /** Binds one named parameter, and answers the statement so that a
+   * chain of them reads the way the statement does. The name is the one
+   * in the statement without its dollar. Binding a name the statement
+   * does not have is a failure rather than a no-op, and binding one
+   * twice replaces the first value. */
   Statement& bind(std::string_view name, std::int64_t v) {
     detail::unwrap_void(bind_int_impl(name, v));
     return *this;
@@ -1592,16 +1816,24 @@ class Statement {
     detail::unwrap_void(bind_null_impl(name));
     return *this;
   }
-  /* A parameter that may or may not be there, which is what a host
+  /** A parameter that may or may not be there, which is what a host
    * holding an optional actually has. */
   template <class T>
   Statement& bind(std::string_view name, const std::optional<T>& v) {
     return v ? bind(name, *v) : bind_null(name);
   }
+  ///@}
 
+  /** Runs it with what is bound now. The bindings survive, so a loop
+   * that rebinds one parameter and executes again does not rebind the
+   * rest. */
   Result execute() { return detail::unwrap(execute_impl()); }
 
 #if ZU_HAS_EXPECTED
+  ///@{
+  /** The expected spelling. Each of these is the call of the same name
+   * above it, doing the same work through the same code, and answering
+   * a failure rather than throwing it. */
   [[nodiscard]] expected<void> try_bind(std::string_view name, std::int64_t v) {
     return detail::to_expected_void(bind_int_impl(name, v));
   }
@@ -1621,6 +1853,7 @@ class Statement {
     return detail::to_expected_void(bind_null_impl(name));
   }
   [[nodiscard]] expected<Result> try_execute() { return detail::to_expected(execute_impl()); }
+  ///@}
 #endif
 
  private:
@@ -1682,7 +1915,7 @@ class Statement {
 
 /* ---- bulk paths ---- */
 
-/* Rows on their way into a table that already exists.
+/** Rows on their way into a table that already exists.
  *
  * A row is written a value at a time, in the order the table declares
  * its columns, and ended by end_row. A refused value ends the row it
@@ -1697,11 +1930,23 @@ class Statement {
 class Appender {
  public:
   Appender() = default;
+  /** Adopts a zu_appender and closes it at the end of the scope.
+   * Connection::appender hands one over already made. */
   explicit Appender(zu_appender* a) noexcept : h_(a) {}
 
+  ///@{
+  /** The handle underneath and whether there is one, for a caller who
+   * has to reach a zu_ call this header does not wrap. Reading through
+   * raw() is fine; closing what it points at is not. */
   zu_appender* raw() const noexcept { return h_.get(); }
   explicit operator bool() const noexcept { return static_cast<bool>(h_); }
+  ///@}
 
+  ///@{
+  /** One value into the row being written, in the order the table
+   * declares its columns, and answering the appender so that a chain
+   * reads as a row. A value the column will not take is a failure that
+   * ends the row it was in, and nothing of that row is kept. */
   Appender& append(bool v) {
     detail::unwrap_void(append_bool_impl(v));
     return *this;
@@ -1728,14 +1973,15 @@ class Appender {
     detail::unwrap_void(append_temporal_impl(v));
     return *this;
   }
+  ///@}
 
-  /* Ends the row being written, which is what makes it a row. */
+  /** Ends the row being written, which is what makes it a row. */
   Appender& end_row() {
     detail::unwrap_void(end_row_impl());
     return *this;
   }
 
-  /* One whole row, which is the shape most callers want: the values in
+  /** One whole row, which is the shape most callers want: the values in
    * the order the table declares them, and the end of the row. */
   template <class... Ts>
   Appender& row(const Ts&... values) {
@@ -1743,31 +1989,45 @@ class Appender {
     return end_row();
   }
 
-  /* One commit. When it returns the rows are durable and every later
+  /** One commit. When it returns the rows are durable and every later
    * statement sees them, and before it returns nothing sees anything. A
    * flush with nothing buffered touches no file. */
   void flush() { detail::unwrap_void(flush_impl()); }
 
+  ///@{
+  /** How many whole rows are waiting on this appender and how many it
+   * has written so far. The two together are every row it has been
+   * given; a row part way through is in neither. */
   std::uint64_t buffered() const { return detail::unwrap(count_impl(zu_appender_buffered)); }
   std::uint64_t committed() const { return detail::unwrap(count_impl(zu_appender_committed)); }
+  ///@}
 
+  ///@{
+  /** The shape of the table this writes into, which is what a program
+   * building rows from a map of names needs in order to put them in the
+   * order append expects. */
   std::uint32_t cols() const { return detail::unwrap(cols_impl()); }
 
   std::string_view col_name(std::uint32_t col) const {
     return detail::unwrap(col_name_impl(col));
   }
+  ///@}
 
-  /* Throws away what is buffered and says how many rows that was. Rows
+  /** Throws away what is buffered and says how many rows that was. Rows
    * an earlier flush committed are committed and this does not reach
    * them. */
   std::uint64_t discard() { return detail::unwrap(discard_impl()); }
 
-  /* Flushes what is left and spends the appender, answering the rows it
+  /** Flushes what is left and spends the appender, answering the rows it
    * committed in all. Closing twice writes nothing the second time, so
    * a cleanup path may close what the load already did. */
   std::uint64_t close() { return detail::unwrap(close_impl()); }
 
 #if ZU_HAS_EXPECTED
+  ///@{
+  /** The expected spelling. Each of these is the call of the same name
+   * above it, doing the same work through the same code, and answering
+   * a failure rather than throwing it. */
   [[nodiscard]] expected<void> try_append(bool v) { return detail::to_expected_void(append_bool_impl(v)); }
   [[nodiscard]] expected<void> try_append(std::int64_t v) { return detail::to_expected_void(append_int_impl(v)); }
   [[nodiscard]] expected<void> try_append(double v) { return detail::to_expected_void(append_double_impl(v)); }
@@ -1787,6 +2047,7 @@ class Appender {
   [[nodiscard]] expected<void> try_flush() { return detail::to_expected_void(flush_impl()); }
   [[nodiscard]] expected<std::uint64_t> try_discard() { return detail::to_expected(discard_impl()); }
   [[nodiscard]] expected<std::uint64_t> try_close() { return detail::to_expected(close_impl()); }
+  ///@}
 #endif
 
  private:
@@ -1893,7 +2154,7 @@ class Appender {
   detail::Handle<zu_appender, zu_appender_free> h_;
 };
 
-/* How values get into a database that does not exist yet.
+/** How values get into a database that does not exist yet.
  *
  * Columnar, for the reason a result is: one call per column, not one
  * per cell. The order is fixed, create then table then columns and
@@ -1905,16 +2166,23 @@ class Appender {
 class Loader {
  public:
   Loader() = default;
+  /** Adopts a zu_loader and frees it at the end of the scope. create is
+   * how one is normally got. */
   explicit Loader(zu_loader* l) noexcept : h_(l) {}
 
-  /* Fails if the path exists, which is what a bulk load is: it builds a
+  /** Fails if the path exists, which is what a bulk load is: it builds a
    * database rather than adding to one. */
   [[nodiscard]] static Loader create(std::string_view path) { return detail::unwrap(create_impl(path)); }
 
+  ///@{
+  /** The handle underneath and whether there is one, for a caller who
+   * has to reach a zu_ call this header does not wrap. Reading through
+   * raw() is fine; freeing what it points at is not. */
   zu_loader* raw() const noexcept { return h_.get(); }
   explicit operator bool() const noexcept { return static_cast<bool>(h_); }
+  ///@}
 
-  /* The rows count is given rather than counted from the first column,
+  /** The rows count is given rather than counted from the first column,
    * so a column with a value missing is an error and not a shorter
    * table. One table per loader. */
   Loader& table(std::string_view nodes, std::string_view edges, std::uint64_t rows) {
@@ -1922,7 +2190,7 @@ class Loader {
     return *this;
   }
 
-  /* Edges as the row each starts at and the row it ends at. Appends, so
+  /** Edges as the row each starts at and the row it ends at. Appends, so
    * call it as often as you like; the loader sorts and deduplicates at
    * finish. */
   Loader& edges(std::span<const std::uint32_t> from, std::span<const std::uint32_t> to) {
@@ -1930,7 +2198,7 @@ class Loader {
     return *this;
   }
 
-  /* One column a call, named for what it holds rather than overloaded
+  /** One column a call, named for what it holds rather than overloaded
    * on the element type. A column of flags and a column of small
    * integers are the same array to C++ and different tables to the
    * engine, and a name is a better place to settle that than an
@@ -1939,17 +2207,18 @@ class Loader {
     detail::unwrap_void(col_ints_impl(name, values));
     return *this;
   }
+  /** The same, for a column of floats. */
   Loader& doubles(std::string_view name, std::span<const double> values) {
     detail::unwrap_void(col_doubles_impl(name, values));
     return *this;
   }
-  /* One int32 a row, any nonzero value true, which is what zu.h takes
+  /** One int32 a row, any nonzero value true, which is what zu.h takes
    * and what a host holding a column of flags has. */
   Loader& bools(std::string_view name, std::span<const std::int32_t> values) {
     detail::unwrap_void(col_bools_impl(name, values));
     return *this;
   }
-  /* Any range of anything a string_view can be made from, which is a
+  /** Any range of anything a string_view can be made from, which is a
    * vector of std::string as readily as one of views. */
   template <detail::StringRange R>
   Loader& strings(std::string_view name, const R& values) {
@@ -1957,17 +2226,24 @@ class Loader {
     detail::unwrap_void(col_strs_impl(name, views));
     return *this;
   }
+  /** A column of temporals as the counts alone, with the kind said once
+   * for the whole column rather than carried on every value. The unit
+   * follows the kind, the way Temporal::count does. */
   Loader& temporals(std::string_view name, TemporalKind kind,
                     std::span<const std::int64_t> values) {
     detail::unwrap_void(col_temporal_impl(name, kind, values));
     return *this;
   }
 
-  /* Writes it all. The database is on disk when this returns, and
+  /** Writes it all. The database is on disk when this returns, and
    * opening the same path reads it. */
   void finish() { detail::unwrap_void(finish_impl()); }
 
 #if ZU_HAS_EXPECTED
+  ///@{
+  /** The expected spelling. Each of these is the call of the same name
+   * above it, doing the same work through the same code, and answering
+   * a failure rather than throwing it. */
   [[nodiscard]] static expected<Loader> try_create(std::string_view path) {
     return detail::to_expected(create_impl(path));
   }
@@ -1995,6 +2271,7 @@ class Loader {
     return detail::to_expected_void(col_temporal_impl(name, kind, values));
   }
   [[nodiscard]] expected<void> try_finish() { return detail::to_expected_void(finish_impl()); }
+  ///@}
 #endif
 
  private:
@@ -2105,7 +2382,7 @@ class Loader {
   detail::Handle<zu_loader, zu_loader_free> h_;
 };
 
-/* Columns of the caller's own memory, named as a table of a connection
+/** Columns of the caller's own memory, named as a table of a connection
  * and read where they lie.
  *
  * Nothing is copied, at registration or at read. What the engine asks
@@ -2120,30 +2397,37 @@ class Loader {
 class Frame {
  public:
   Frame() = default;
+  /** Adopts a zu_frame and frees it at the end of the scope. create is
+   * how one is normally got. */
   explicit Frame(zu_frame* f) noexcept : h_(f) {}
 
-  /* A frame over buffers the caller keeps alive itself. */
+  /** A frame over buffers the caller keeps alive itself. */
   [[nodiscard]] static Frame create(std::string_view name, std::uint64_t rows) {
     return detail::unwrap(create_impl(name, rows, {}));
   }
-  /* A frame that says when the engine has finished with it. The
+  /** A frame that says when the engine has finished with it. The
    * callback runs once, on a thread of the library's, and is where a
    * host that has to take a lock to let go of what it passed takes
    * it. */
   [[nodiscard]] static Frame create(std::string_view name, std::uint64_t rows, std::function<void()> release) {
     return detail::unwrap(create_impl(name, rows, std::move(release)));
   }
-  /* The same, keeping something alive rather than running something: a
+  /** The same, keeping something alive rather than running something: a
    * shared_ptr to whatever owns the buffers, dropped when the engine is
    * done. */
   [[nodiscard]] static Frame create(std::string_view name, std::uint64_t rows, std::shared_ptr<void> keepalive) {
     return create(name, rows, [held = std::move(keepalive)]() mutable { held.reset(); });
   }
 
+  ///@{
+  /** The handle underneath and whether there is one, for a caller who
+   * has to reach a zu_ call this header does not wrap. Reading through
+   * raw() is fine; freeing what it points at is not. */
   zu_frame* raw() const noexcept { return h_.get(); }
   explicit operator bool() const noexcept { return static_cast<bool>(h_); }
+  ///@}
 
-  /* An integer column, of any width this engine can widen from. Sixty
+  /** An integer column, of any width this engine can widen from. Sixty
    * four signed bits at scale 1 is the lane it reads natively and the
    * column that costs nothing at all.
    *
@@ -2157,7 +2441,7 @@ class Frame {
     return *this;
   }
 
-  /* One bit a row, low bit of the first byte first, which is Arrow's
+  /** One bit a row, low bit of the first byte first, which is Arrow's
    * bitmap and this engine's alike. The count is the rows rather than
    * the bytes, because a bitmap of ten rows is two bytes and neither
    * number can be worked out from the other. */
@@ -2166,7 +2450,8 @@ class Frame {
     return *this;
   }
 
-  /* Arrow's Utf8 with 32-bit offsets and its LargeUtf8 with 64-bit
+  ///@{
+  /** Arrow's Utf8 with 32-bit offsets and its LargeUtf8 with 64-bit
    * ones. There are count + 1 offsets and the last is how much of data
    * is used. */
   Frame& strings(std::string_view name, std::span<const std::int32_t> offsets,
@@ -2181,8 +2466,9 @@ class Frame {
                                      offsets.empty() ? 0 : offsets.size() - 1));
     return *this;
   }
+  ///@}
 
-  /* Arrow's Utf8View: sixteen bytes a row over the buffers named by the
+  /** Arrow's Utf8View: sixteen bytes a row over the buffers named by the
    * two arrays. A short string in that layout is already this engine's
    * own view, byte for byte. */
   Frame& views(std::string_view name, std::span<const std::byte> views_buffer,
@@ -2194,6 +2480,10 @@ class Frame {
   }
 
 #if ZU_HAS_EXPECTED
+  ///@{
+  /** The expected spelling. Each of these is the call of the same name
+   * above it, doing the same work through the same code, and answering
+   * a failure rather than throwing it. */
   [[nodiscard]] static expected<Frame> try_create(std::string_view name, std::uint64_t rows,
                                     std::function<void()> release = {}) {
     return detail::to_expected(create_impl(name, rows, std::move(release)));
@@ -2212,10 +2502,11 @@ class Frame {
     return detail::to_expected_void(col_str_impl(name, offsets.data(), 0, data.data(), data.size(),
                                                  offsets.empty() ? 0 : offsets.size() - 1));
   }
+  ///@}
 #endif
 
  private:
-  /* The one place the width and the signedness of a column are worked
+  /** The one place the width and the signedness of a column are worked
    * out, which is a thing C++ knows here and C did not: the caller
    * passes the array it already had and the type of its elements says
    * what to tell the engine. A float column takes no scale and no
@@ -2332,27 +2623,33 @@ class Frame {
 
 class Transaction;
 
-/* How a database is opened. Zero means the default in every field, so a
+/** How a database is opened. Zero means the default in every field, so a
  * default-built Config opens the same database as none at all. */
 class Config {
  public:
   Config() { zu_config_init(&c_); }
 
+  /** How much the executor may hold at once, in bytes. 0 is no limit.
+   * A statement that would need more fails rather than being killed by
+   * the operating system. */
   Config& memory_limit(std::size_t bytes) {
     c_.memory_limit = bytes;
     return *this;
   }
-  /* Query workers. 0 lets the executor pick, 1 is sequential. */
+  /** Query workers. 0 lets the executor pick, 1 is sequential. */
   Config& threads(std::size_t n) {
     c_.threads = n;
     return *this;
   }
+  /** Refuses every write on connections opened with it, which is what a
+   * reporting process wants: the refusal comes from the engine rather
+   * than from a rule somebody has to remember. */
   Config& read_only(bool yes = true) {
     c_.read_only = yes ? 1 : 0;
     return *this;
   }
 
-  /* One option by name, which is what a program forwarding a user's
+  /** One option by name, which is what a program forwarding a user's
    * option map has. The keys are memory_limit, threads and read_only,
    * and an unrecognized one is refused and named. */
   Config& set(std::string_view key, std::string_view value) {
@@ -2361,11 +2658,19 @@ class Config {
   }
 
 #if ZU_HAS_EXPECTED
+  ///@{
+  /** The expected spelling. Each of these is the call of the same name
+   * above it, doing the same work through the same code, and answering
+   * a failure rather than throwing it. */
   [[nodiscard]] expected<void> try_set(std::string_view key, std::string_view value) {
     return detail::to_expected_void(set_impl(key, value));
   }
+  ///@}
 #endif
 
+  /** The zu_config underneath, for a caller who has to reach a zu_ call
+   * this header does not wrap. It is a member rather than a handle, so
+   * it lives as long as the Config does and there is nothing to free. */
   const zu_config* raw() const noexcept { return &c_; }
 
  private:
@@ -2382,7 +2687,7 @@ class Config {
   zu_config c_{};
 };
 
-/* A path and a configuration that have been checked against a real
+/** A path and a configuration that have been checked against a real
  * file. It holds no descriptor and no cache, so it is thread-safe and
  * shareable, and a host that queries from four threads opens one of
  * these and connects four times.
@@ -2393,34 +2698,51 @@ class Config {
 class Database {
  public:
   Database() = default;
+  /** Adopts a zu_database and closes it at the end of the scope. open,
+   * create and memory are how one is normally got. */
   explicit Database(zu_database* db) noexcept : h_(db) {}
 
+  /** Opens what is at the path, which has to be there. */
   [[nodiscard]] static Database open(std::string_view path, const Config& cfg = Config{}) {
     return detail::unwrap(open_impl(path, cfg));
   }
-  /* The path must not exist. A create that opened what it found there
+  /** The path must not exist. A create that opened what it found there
    * would be the call that quietly writes into somebody else's data. */
   [[nodiscard]] static Database create(std::string_view path, const Config& cfg = Config{}) {
     return detail::unwrap(create_impl(path, cfg));
   }
-  /* A database that never touches the filesystem. Every call makes one
+  /** A database that never touches the filesystem. Every call makes one
    * of its own: two connections on one handle are two views of one
    * graph, and two handles share nothing. */
   [[nodiscard]] static Database memory(const Config& cfg = Config{}) { return detail::unwrap(memory_impl(cfg)); }
 
+  ///@{
+  /** The handle underneath and whether there is one, for a caller who
+   * has to reach a zu_ call this header does not wrap. Reading through
+   * raw() is fine; closing what it points at is not. */
   zu_database* raw() const noexcept { return h_.get(); }
   explicit operator bool() const noexcept { return static_cast<bool>(h_); }
+  ///@}
 
+  /** True for one made by memory, which is the case where path is a
+   * name rather than something to open. */
   bool is_memory() const { return zu_database_is_memory(h_.get()) == ZU_OK; }
 
-  /* What this process calls the database, which for one in memory is a
+  /** What this process calls the database, which for one in memory is a
    * name rather than a path: it is what an error message needs and not
    * something to open. */
   std::string_view path() const { return detail::unwrap(path_impl()); }
 
+  /** A connection of its own, which is what a thread needs. The
+   * database may be shared between threads and a connection may not, so
+   * four threads call this four times. */
   inline Connection connect() const;
 
 #if ZU_HAS_EXPECTED
+  ///@{
+  /** The expected spelling. Each of these is the call of the same name
+   * above it, doing the same work through the same code, and answering
+   * a failure rather than throwing it. */
   [[nodiscard]] static expected<Database> try_open(std::string_view path, const Config& cfg = Config{}) {
     return detail::to_expected(open_impl(path, cfg));
   }
@@ -2432,6 +2754,7 @@ class Database {
   }
   [[nodiscard]] expected<std::string_view> try_path() const { return detail::to_expected(path_impl()); }
   [[nodiscard]] inline expected<Connection> try_connect() const;
+  ///@}
 #endif
 
  private:
@@ -2479,7 +2802,7 @@ class Database {
   detail::Handle<zu_database, zu_database_close> h_;
 };
 
-/* The state that cannot be shared: a file handle, the caches, and the
+/** The state that cannot be shared: a file handle, the caches, and the
  * plans compiled against a catalog.
  *
  * A connection may move between threads but must not be used from two
@@ -2490,8 +2813,17 @@ class Database {
 class Connection {
  public:
   Connection() = default;
+  /** Adopts a zu_conn and closes it at the end of the scope. open,
+   * create, memory and Database::connect are how one is normally got. */
   explicit Connection(zu_conn* c) noexcept : h_(c) {}
 
+  ///@{
+  /** Moves, and does not copy. A connection is one thread's, so a copy
+   * would be the shape that lets two threads share one, and the moved
+   * from connection is empty rather than closed: destroying it is fine
+   * and using it throws. The assignment clears the progress callback
+   * this connection had first, because that callback is registered with
+   * the library and outlives the handle otherwise. */
   Connection(Connection&&) noexcept = default;
   Connection& operator=(Connection&& o) noexcept {
     if (this != &o) {
@@ -2501,27 +2833,46 @@ class Connection {
     }
     return *this;
   }
+  ///@}
   ~Connection() { clear_progress_quietly(); }
 
-  /* One database with the default configuration, one connection on it,
-   * and nothing else to keep track of. */
+  ///@{
+  /** One database with the default configuration, one connection on it,
+   * and nothing else to keep track of. open wants the path to be there,
+   * create wants it not to be, and memory touches no file at all. A
+   * program that wants a configuration, or more than one connection,
+   * opens a Database instead. */
   [[nodiscard]] static Connection open(std::string_view path) { return detail::unwrap(open_impl(path)); }
   [[nodiscard]] static Connection create(std::string_view path) { return detail::unwrap(create_impl(path)); }
   [[nodiscard]] static Connection memory() { return detail::unwrap(memory_impl()); }
+  ///@}
 
+  ///@{
+  /** The handle underneath and whether there is one, for a caller who
+   * has to reach a zu_ call this header does not wrap. Reading through
+   * raw() is fine; closing what it points at is not. */
   zu_conn* raw() const noexcept { return h_.get(); }
   explicit operator bool() const noexcept { return static_cast<bool>(h_); }
+  ///@}
 
-  /* A second connection on the database this one is already on, made
+  /** A second connection on the database this one is already on, made
    * without a path. The switches and the read-only setting come across;
    * the caches, the interrupt and the transaction do not, because those
    * are what makes it a connection of its own. */
   Connection duplicate() { return detail::unwrap(duplicate_impl()); }
 
+  /** Runs one statement and answers the whole of what it read. There
+   * are no parameters here on purpose: a statement with a value in it
+   * is built by prepare and bind rather than by pasting text. */
   Result query(std::string_view q) { return detail::unwrap(query_impl(q)); }
+
+  /** Parses and plans one statement, ready to be bound and run. This is
+   * where a syntax error comes back, so a program that prepares its
+   * statements at start-up hears about them then rather than under
+   * load. */
   Statement prepare(std::string_view q) { return detail::unwrap(prepare_impl(q)); }
 
-  /* Stops the statement running on this connection at the next boundary
+  /** Stops the statement running on this connection at the next boundary
    * the executor checks. Nothing failed: the connection keeps its plans
    * and its warm caches and runs the next statement normally, which is
    * the difference between this and closing it.
@@ -2530,13 +2881,13 @@ class Connection {
    * while the connection is in use. */
   void interrupt() { detail::unwrap_void(interrupt_impl()); }
 
-  /* How many rows the running statement has read out of storage,
+  /** How many rows the running statement has read out of storage,
    * counted from zero at each statement. Rows read rather than rows
    * answered, because the statement a user is waiting on is exactly the
    * one reading a hundred million rows to answer one. */
   std::uint64_t rows_read() const { return detail::unwrap(rows_read_impl()); }
 
-  /* Asks to be called back every interval while a statement runs, with
+  /** Asks to be called back every interval while a statement runs, with
    * the rows read and the time since it started. Returning false stops
    * the statement exactly as interrupt would.
    *
@@ -2546,14 +2897,17 @@ class Connection {
    * to be usable from another thread, and that it must not call back
    * into this library on the connection it is reporting on. */
   using Progress = std::function<bool(std::uint64_t rows, std::chrono::milliseconds elapsed)>;
+  /** Sets the arrangement above. Calling it again replaces the watcher;
+   * clear_progress takes it back. */
   void on_progress(std::chrono::milliseconds every, Progress watcher) {
     detail::unwrap_void(set_progress_impl(every, std::move(watcher)));
   }
-  /* Takes the arrangement back. A statement already running keeps the
+  /** Takes the arrangement back. A statement already running keeps the
    * one it started with. */
   void clear_progress() { detail::unwrap_void(set_progress_impl({}, nullptr)); }
 
-  /* Several statements as one: what they wrote is kept by commit or
+  ///@{
+  /** Several statements as one: what they wrote is kept by commit or
    * unmade by rollback, and nothing between the two is visible to
    * another connection until the commit publishes it.
    *
@@ -2567,30 +2921,32 @@ class Connection {
    * ends on the next line.
    *
    * begin, commit and rollback are the same three calls without the
-   * guard, for a host putting a scope of its own around them. */
+   * guard, for a host putting a scope of its own around them, and
+   * in_transaction says whether one is open. */
   [[nodiscard]] inline Transaction transaction(bool read_only = false);
   void begin(bool read_only = false) { detail::unwrap_void(begin_impl(read_only)); }
   void commit() { detail::unwrap_void(commit_impl()); }
   void rollback() { detail::unwrap_void(rollback_impl()); }
   bool in_transaction() const { return detail::unwrap(in_transaction_impl()); }
+  ///@}
 
-  /* Rows on their way into a table that already exists. Opening it is
+  /** Rows on their way into a table that already exists. Opening it is
    * where a table nothing declares and a read-only connection are
    * refused, rather than at the first flush a million rows later. */
   Appender appender(std::string_view table) { return detail::unwrap(appender_impl(table)); }
 
-  /* Names the frame as a table of this connection. Does not spend the
+  /** Names the frame as a table of this connection. Does not spend the
    * handle, so registering it on two connections registers the same
    * memory twice. */
   void register_frame(Frame& f) { detail::unwrap_void(register_impl(f)); }
-  /* Drops one, answering whether there was one under that name. */
+  /** Drops one, answering whether there was one under that name. */
   bool unregister_frame(std::string_view name) { return detail::unwrap(unregister_impl(name)); }
-  /* What is registered, in sorted order. The names are copied, because
+  /** What is registered, in sorted order. The names are copied, because
    * the pointers the ABI hands out are good only until the next count
    * call and a vector of views into them would be a trap. */
   std::vector<std::string> registered() const { return detail::unwrap(registered_impl()); }
 
-  /* What the table id in a node or a rel is called, and nothing when no
+  /** What the table id in a node or a rel is called, and nothing when no
    * table has that id. A node is a table and an offset and nothing else,
    * which is what makes it cheap, so this is the call that turns one
    * back into something a person reads.
@@ -2609,6 +2965,10 @@ class Connection {
   }
 
 #if ZU_HAS_EXPECTED
+  ///@{
+  /** The expected spelling. Each of these is the call of the same name
+   * above it, doing the same work through the same code, and answering
+   * a failure rather than throwing it. */
   [[nodiscard]] static expected<Connection> try_open(std::string_view path) {
     return detail::to_expected(open_impl(path));
   }
@@ -2646,6 +3006,7 @@ class Connection {
   [[nodiscard]] expected<std::optional<std::string>> try_table_name(std::uint32_t table) const {
     return detail::to_expected(table_name_impl(table));
   }
+  ///@}
 #endif
 
  private:
@@ -2858,7 +3219,7 @@ class Connection {
   std::unique_ptr<Watch> watch_;
 };
 
-/* A transaction as a scope. Committing is a call, because a commit that
+/** A transaction as a scope. Committing is a call, because a commit that
  * happened because a scope ended is a commit nobody wrote down; rolling
  * back is the destructor, because the path that leaves a transaction
  * open is the path that threw.
@@ -2869,8 +3230,16 @@ class Connection {
 class Transaction {
  public:
   Transaction() = default;
+  /** Takes charge of a transaction the connection has already begun.
+   * Connection::transaction is what builds one; this does not begin
+   * anything itself. */
   explicit Transaction(Connection& conn) noexcept : conn_(&conn) {}
 
+  ///@{
+  /** Moves, and does not copy, because two guards over one transaction
+   * would be two rollbacks. The moved from guard owns nothing and its
+   * destructor does nothing, and assigning over a guard that still owns
+   * one rolls that one back first. */
   Transaction(Transaction&& o) noexcept : conn_(std::exchange(o.conn_, nullptr)) {}
   Transaction& operator=(Transaction&& o) noexcept {
     if (this != &o) {
@@ -2881,9 +3250,14 @@ class Transaction {
   }
   Transaction(const Transaction&) = delete;
   Transaction& operator=(const Transaction&) = delete;
+  ///@}
 
   ~Transaction() { undo(); }
 
+  ///@{
+  /** Ends the transaction, one way or the other, and spends the guard
+   * so that the destructor has nothing left to undo. Either one on a
+   * guard that has already been spent does nothing. */
   void commit() {
     Connection* c = std::exchange(conn_, nullptr);
     if (c != nullptr) {
@@ -2896,8 +3270,9 @@ class Transaction {
       c->rollback();
     }
   }
+  ///@}
 
-  /* True while this scope still owns a transaction. */
+  /** True while this scope still owns a transaction. */
   explicit operator bool() const noexcept { return conn_ != nullptr; }
 
  private:
@@ -2956,7 +3331,7 @@ inline detail::Outcome<detail::Nothing> Result::arrow_impl(zu_conn* conn, ArrowA
   zu_result* r = h_.release();
   zu_error* err = nullptr;
   const zu_status st = zu_result_arrow(conn, &r, rows_per_batch, out, &err);
-  /* The call writes NULL back on every path, the failing ones included,
+  /** The call writes NULL back on every path, the failing ones included,
    * because the buffers were on their way out before anything could
    * refuse. Nothing is left to free either way. */
   if (auto e = detail::checked(st, &err, "zu_result_arrow")) {
@@ -2981,17 +3356,45 @@ inline expected<void> Result::try_to_arrow(Connection& conn, ArrowArrayStream* o
 }
 #endif
 
-/* ---- printing ----
+/* ---- printing ---- */
+
+namespace detail {
+
+/** A double as a person reads it.
  *
- * All of this is for a person to read: a log line, a test failure, a
+ * Fifteen significant digits rather than the seventeen that round-trip
+ * every double exactly, because this is the printing section: 0.1
+ * should print as 0.1 and not as 0.10000000000000001, and a caller who
+ * needs the bits back has as_double and is not scraping them out of a
+ * log line.
+ *
+ * snprintf rather than std::to_chars, which is the better tool and is
+ * C++17. The floating point half of to_chars landed in the standard
+ * libraries years after the integer half, and this header promises to
+ * compile at the C++20 floor rather than on the subset of C++20
+ * toolchains that happen to have shipped it. */
+inline std::string printed(double d) {
+  char buf[32];
+  const int n = std::snprintf(buf, sizeof buf, "%.15g", d);
+  if (n <= 0) {
+    return "nan";
+  }
+  const auto len = static_cast<std::size_t>(n);
+  return std::string(buf, len < sizeof buf ? len : sizeof buf - 1);
+}
+
+}  // namespace detail
+
+///@{
+/** All of this is for a person to read: a log line, a test failure, a
  * debugger watch. A program that wants the bits calls the accessor.
  *
  * to_string is the whole of it, and the std::formatter specializations
- * below are one line each over it. That way the C++20 floor gets the
- * same text as C++23 without needing <format> to be there, and the two
- * spellings cannot come to disagree about what a value looks like, for
- * the same reason the throwing and try_ halves are one line over one
- * implementation.
+ * at the foot of this header are one line each over it. That way the
+ * C++20 floor gets the same text as C++23 without needing \<format\>
+ * to be there, and the two spellings cannot come to disagree about
+ * what a value looks like, for the same reason the throwing and try_
+ * halves are one line over one implementation.
  *
  * The enums answer a view of a string literal, which costs nothing and
  * needs no allocation to print a status in a hot path. The rest build a
@@ -3000,7 +3403,6 @@ inline expected<void> Result::try_to_arrow(Connection& conn, ArrowArrayStream* o
  * Every one of these is an overload of a single name rather than
  * to_string_status and to_string_node, so a generic caller writes
  * to_string(x) and argument dependent lookup finds it. */
-
 inline std::string_view to_string(Status s) noexcept {
   switch (s) {
     case Status::ok: return "ok";
@@ -3033,7 +3435,7 @@ inline std::string_view to_string(Severity s) noexcept {
   return "unknown";
 }
 
-/* The names the API model uses, not the C++ spellings. A column of
+/** The names the API model uses, not the C++ spellings. A column of
  * whole numbers is an INT everywhere else a reader will meet it, and a
  * printer that called it `integer` because that is what the enumerator
  * had to be named would be teaching a vocabulary nothing else speaks. */
@@ -3071,37 +3473,10 @@ inline std::string_view to_string(TemporalKind k) noexcept {
   return "unknown";
 }
 
-namespace detail {
-
-/* A double as a person reads it.
- *
- * Fifteen significant digits rather than the seventeen that round-trip
- * every double exactly, because this is the printing section: 0.1
- * should print as 0.1 and not as 0.10000000000000001, and a caller who
- * needs the bits back has as_double and is not scraping them out of a
- * log line.
- *
- * snprintf rather than std::to_chars, which is the better tool and is
- * C++17. The floating point half of to_chars landed in the standard
- * libraries years after the integer half, and this header promises to
- * compile at the C++20 floor rather than on the subset of C++20
- * toolchains that happen to have shipped it. */
-inline std::string printed(double d) {
-  char buf[32];
-  const int n = std::snprintf(buf, sizeof buf, "%.15g", d);
-  if (n <= 0) {
-    return "nan";
-  }
-  const auto len = static_cast<std::size_t>(n);
-  return std::string(buf, len < sizeof buf ? len : sizeof buf - 1);
-}
-
-}  // namespace detail
-
+/** Line and column, and not the offset. The offset is for a tool that
+ * is going to index into the statement; a person reading a failure
+ * wants the two numbers their editor shows them. */
 inline std::string to_string(Position p) {
-  /* Line and column, and not the offset. The offset is for a tool that
-   * is going to index into the statement; a person reading a failure
-   * wants the two numbers their editor shows them. */
   return "line " + std::to_string(p.line) + ", column " + std::to_string(p.column);
 }
 
@@ -3114,10 +3489,10 @@ inline std::string to_string(Rel r) {
          std::to_string(r.dst);
 }
 
+/** The kind first, because the count means nothing without it: 19000
+ * is a date in 2022 and a duration of nineteen microseconds, and the
+ * only thing that tells them apart is the word in front. */
 inline std::string to_string(Temporal t) {
-  /* The kind first, because the count means nothing without it: 19000
-   * is a date in 2022 and a duration of nineteen microseconds, and the
-   * only thing that tells them apart is the word in front. */
   std::string out(to_string(t.kind));
   out += ' ';
   out += std::to_string(t.count);
@@ -3128,7 +3503,7 @@ inline std::string to_string(Temporal t) {
   return out;
 }
 
-/* A failure on one line, which is what a log wants. Error::report is
+/** A failure on one line, which is what a log wants. Error::report is
  * the other spelling, three lines with a caret under the column, for
  * the program that is showing somebody a statement to fix.
  *
@@ -3155,7 +3530,7 @@ inline std::string to_string(const Error& e) {
   return out;
 }
 
-/* A cell on one line.
+/** A cell on one line.
  *
  * Dispatched on the type the value says it is rather than on a call
  * that could refuse, so printing a cell is not a thing that throws
@@ -3183,11 +3558,19 @@ inline std::string to_string(const Value& v) {
   }
   return std::string(to_string(v.type())) + " of " + std::to_string(v.size());
 }
+///@}
 
 }  // namespace zu
 
 #if ZU_HAS_FORMAT
-/* std::format over the same text.
+/** std::format over the same text.
+ *
+ * Defines std::formatter for the ten types zu::to_string prints:
+ * Status, Severity, Type, TemporalKind, Position, Node, Rel, Temporal,
+ * Error and Value. Each specialization is one line over the to_string
+ * overload of the same type, so std::format("{}", v) and
+ * zu::to_string(v) are the same bytes by construction rather than by
+ * two pieces of code being kept in step.
  *
  * Each of these inherits formatter<string_view>, so the whole standard
  * format spec arrives with it and none of it had to be written here:
