@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# The reference goes out with the release rather than beside the source.
+#
+# A generated reference that lives in the repository is a directory of
+# HTML in every diff and a thing somebody eventually regenerates by hand
+# from a working copy that was not the tag. Built here, from the tag, it
+# is the header that shipped and nothing else, and there is one copy of
+# it rather than one per branch.
+#
+# Nothing else is released from this repository yet. zu.hpp is a single
+# header and the way to get it is the tag, so there is no archive to
+# build; when the packaging the README promises lands, the vcpkg and
+# Conan steps belong in this file beside this job.
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Install doxygen
+        run: sudo apt-get update && sudo apt-get install -y doxygen
+
+      - name: Configure
+        run: cmake -B build -DZU_CPP_DOCS=ON
+
+      # The same check CI runs, run again here, because this is the copy
+      # that gets published and a release is the worst place to find out
+      # that the reference came out empty.
+      - name: Every type the header declares has a page and no member is bare
+        run: ctest --test-dir build -R reference --output-on-failure
+
+      - name: Pack it
+        run: |
+          set -eu
+          tar -czf "zu-cpp-reference-${GITHUB_REF_NAME}.tar.gz" \
+            -C build/docs/reference html
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reference
+          path: zu-cpp-reference-*.tar.gz
+          if-no-files-found: error
+
+      # Only on a tag. A manual run builds the reference and leaves the
+      # artifact, which is what somebody checking this file wants, and
+      # does not attach anything to a release that is not there.
+      - name: Attach it to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: gh release upload "$GITHUB_REF_NAME" "zu-cpp-reference-${GITHUB_REF_NAME}.tar.gz" --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -271,6 +271,42 @@ jobs:
         env:
           ZU_TEST_ROWS: 300
 
+  # The reference, built the same way the release builds it, and graded
+  # rather than glanced at.
+  #
+  # No engine on this one, which is why it is thirty seconds rather than
+  # ten minutes: the reference is about the header, and the header is
+  # here whether a library was built or not.
+  #
+  # ctest rather than the docs target, because they run the same script
+  # and this is the spelling that fails the job. Doxygen exits 0 on a
+  # header it read nothing out of, so a step that only ran Doxygen would
+  # be a green job over an empty reference, which is exactly what
+  # happened once. docs/reference.py says what that check is.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Install doxygen
+        run: sudo apt-get update && sudo apt-get install -y doxygen
+
+      - name: Configure
+        run: cmake -B build -DZU_CPP_DOCS=ON
+
+      - name: Every type the header declares has a page and no member is bare
+        run: ctest --test-dir build -R reference --output-on-failure
+
+      # So that a reviewer can read the page a change to a comment
+      # produced rather than take the diff's word for it.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reference
+          path: build/docs/reference/html
+          if-no-files-found: error
+
   # The claim the packaging makes is that a project that installed this
   # can find it. Nothing in the suite can check that, because the suite
   # is inside the build tree and finds the header by being next to it.

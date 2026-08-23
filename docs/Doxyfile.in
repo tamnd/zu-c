@@ -1,0 +1,80 @@
+# The reference, generated from the header that ships.
+#
+# Configured by CMake into the build tree, because three of the paths in
+# it are the build's rather than the repository's. Nothing here is a
+# second description of the API: the input is the one header, and every
+# name in the reference came out of it.
+#
+# Read docs/reference.py beside this. Doxygen exiting 0 does not mean it
+# documented anything, and that script is what says it did.
+
+PROJECT_NAME           = "zu for C++"
+PROJECT_NUMBER         = "@PROJECT_VERSION@"
+PROJECT_BRIEF          = "@PROJECT_DESCRIPTION@"
+
+INPUT                  = @ZU_CPP_DOCS_INPUT@
+OUTPUT_DIRECTORY       = @ZU_CPP_DOCS_OUTPUT@
+WARN_LOGFILE           = @ZU_CPP_DOCS_WARNINGS@
+
+# HTML is what a reader opens and XML is what the gate reads. Neither
+# needs LaTeX, and building it costs a minute and a toolchain nobody
+# here has.
+GENERATE_HTML          = YES
+GENERATE_XML           = YES
+GENERATE_LATEX         = NO
+
+# The whole point of the item. EXTRACT_ALL would publish a page for
+# every name whether anybody wrote a word about it or not, which is a
+# reference that is complete and says nothing, and it would turn
+# WARN_IF_UNDOCUMENTED off in the process.
+EXTRACT_ALL            = NO
+EXTRACT_STATIC         = YES
+WARN_IF_UNDOCUMENTED   = YES
+
+# The header documents an overload set once rather than once per
+# overload, and @param on a call whose parameter is named for what it is
+# would be noise in the source and in the output both.
+WARN_NO_PARAMDOC       = NO
+
+# One comment inside ///@{ ... ///@} covers every member of the group.
+# That is how the try_ half of each class is documented: it is the same
+# call as the one above it answering a failure rather than throwing, and
+# saying so sixty times is how prose comes to disagree with itself.
+DISTRIBUTE_GROUP_DOC   = YES
+
+JAVADOC_AUTOBRIEF      = YES
+QUIET                  = YES
+
+# Graphviz is not a dependency of this repository and the reference does
+# not need call graphs. The inheritance of nine exception classes off
+# one base reads fine as a list.
+HAVE_DOT               = NO
+
+# zu::detail is where the machinery lives. It has an underscore's worth
+# of a name on it and none of it is a thing to call.
+EXCLUDE_SYMBOLS        = zu::detail zu::detail::*
+
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+
+# Never put ZU_HPP in here.
+#
+# It is the header's own include guard, and defining it makes #ifndef
+# ZU_HPP false, so Doxygen's preprocessor throws the entire file away.
+# What comes out is exit status 0, no warnings at all, and a reference
+# with nothing in it. This cost a day. WARN_IF_UNDOCUMENTED does not
+# fire when there is nothing to be undocumented, which is why the gate
+# in reference.py counts what the header declares rather than trusting
+# the exit status.
+#
+# The feature test macros rather than ZU_HAS_EXPECTED and ZU_HAS_FORMAT,
+# because the header defines those two itself from these and predefining
+# them leaves the #else branch as the one Doxygen reads and documents.
+#
+# ZU_FORMATTER expands to nothing so that its ten invocations do not
+# arrive as ten functions nobody declared. The macro itself is
+# documented where it is defined and names what it specializes.
+PREDEFINED             = __cpp_lib_expected=202202L \
+                         __cpp_lib_format=201907L \
+                         ZU_FORMATTER(TYPE)=
