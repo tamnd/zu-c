@@ -39,23 +39,41 @@ jobs:
       - name: Every type the header declares has a page and no member is bare
         run: ctest --test-dir build -R reference --output-on-failure
 
+      # And the surface, which at a tag is not a review aid any more. A
+      # release whose api/surface.txt is out of date is a release whose
+      # published names are not the ones anybody agreed to, and the tag
+      # is the last moment that can still be found out cheaply.
+      - name: The published surface is still what api/surface.txt says
+        run: ctest --test-dir build -R 'surface' --output-on-failure
+
       - name: Pack it
         run: |
           set -eu
           tar -czf "zu-cpp-reference-${GITHUB_REF_NAME}.tar.gz" \
             -C build/docs/reference html
+          cp api/surface.txt "zu-cpp-surface-${GITHUB_REF_NAME}.txt"
 
       - uses: actions/upload-artifact@v4
         with:
           name: reference
-          path: zu-cpp-reference-*.tar.gz
+          path: |
+            zu-cpp-reference-*.tar.gz
+            zu-cpp-surface-*.txt
           if-no-files-found: error
 
       # Only on a tag. A manual run builds the reference and leaves the
       # artifact, which is what somebody checking this file wants, and
       # does not attach anything to a release that is not there.
+      #
+      # The surface goes up beside the reference and not only inside it.
+      # It is one text file, and two of them from two releases diff into
+      # the answer to the question somebody upgrading is actually
+      # asking, which no amount of generated HTML will give them.
       - name: Attach it to the release
         if: startsWith(github.ref, 'refs/tags/')
-        run: gh release upload "$GITHUB_REF_NAME" "zu-cpp-reference-${GITHUB_REF_NAME}.tar.gz" --clobber
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            "zu-cpp-reference-${GITHUB_REF_NAME}.tar.gz" \
+            "zu-cpp-surface-${GITHUB_REF_NAME}.txt" --clobber
         env:
           GH_TOKEN: ${{ github.token }}

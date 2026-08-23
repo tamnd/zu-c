@@ -3578,11 +3578,11 @@ inline std::string to_string(const Value& v) {
  * is rejected at compile time by the base class rather than accepted
  * and ignored.
  *
- * <format> was already included at the top of this header and
+ * \<format\> was already included at the top of this header and
  * ZU_HAS_FORMAT was already defined, and nothing used either, which is
  * a header claiming a capability it did not have.
  *
- * No operator<< to go with it, on purpose. <ostream> is one of the
+ * No operator<< to go with it, on purpose. \<ostream\> is one of the
  * heaviest headers in the standard library and it would land in every
  * translation unit that includes this one whether it prints or not, for
  * a wrapper whose first line is that it includes zu.h and calls nothing

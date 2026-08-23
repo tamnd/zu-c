@@ -68,13 +68,31 @@ EXPAND_ONLY_PREDEF     = YES
 # in reference.py counts what the header declares rather than trusting
 # the exit status.
 #
-# The feature test macros rather than ZU_HAS_EXPECTED and ZU_HAS_FORMAT,
-# because the header defines those two itself from these and predefining
-# them leaves the #else branch as the one Doxygen reads and documents.
+# Both halves of each feature switch, and both are needed for different
+# reasons.
+#
+# The feature test macros are here because the header defines
+# ZU_HAS_EXPECTED and ZU_HAS_FORMAT from them, and with neither defined
+# Doxygen reads the #else branch and documents the wrong one of the two
+# definitions.
+#
+# ZU_HAS_EXPECTED and ZU_HAS_FORMAT are here because EXPAND_ONLY_PREDEF
+# means a #define Doxygen read in the file is not a value it will
+# evaluate an #if against. Without them every `#if ZU_HAS_EXPECTED`
+# block is skipped, and that is the whole expected mirror: ninety two
+# try_ members that were published nowhere and warned about nowhere,
+# because a member the preprocessor threw away cannot be undocumented.
+# Whether they agree with the branch the header would have taken is the
+# reader's problem and not Doxygen's, so they are written out here as
+# the values the reference is generated at.
 #
 # ZU_FORMATTER expands to nothing so that its ten invocations do not
 # arrive as ten functions nobody declared. The macro itself is
-# documented where it is defined and names what it specializes.
+# documented where it is defined and names what it specializes, and
+# docs/surface.py puts the ten back, because a specialization a caller
+# formats against is published whether Doxygen sees it or not.
 PREDEFINED             = __cpp_lib_expected=202202L \
                          __cpp_lib_format=201907L \
+                         ZU_HAS_EXPECTED=1 \
+                         ZU_HAS_FORMAT=1 \
                          ZU_FORMATTER(TYPE)=
