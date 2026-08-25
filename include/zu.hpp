@@ -405,6 +405,21 @@ struct Decimal {
   }
 
 #if ZU_HAS_INT128
+/* __int128 is an extension and -Wpedantic is the flag that says so, in
+ * so many words: "ISO C++ does not support __int128". It is right, and
+ * the two calls below are here anyway, because the alternative is
+ * handing a caller who has a 128 bit type the two halves and letting
+ * them put it back together.
+ *
+ * The silence is written here rather than left to the build, because
+ * this header is installed and a caller compiles it with their flags
+ * and not ours. A project that builds at -Wpedantic -Werror, which is a
+ * reasonable thing to do, would otherwise fail on a header it only
+ * included. The pragma covers these two declarations and nothing else:
+ * whatever the caller writes in their own file is still theirs to hear
+ * about. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
   ///@{
   /** The full 128 bit integer, taken and given back, on a compiler with
    * a type that wide.
@@ -423,6 +438,7 @@ struct Decimal {
                                  lo);
   }
   ///@}
+#pragma GCC diagnostic pop
 #endif
 
   /** The unscaled integer when it fits an int64_t, and nothing when it
