@@ -273,6 +273,40 @@ static void set_stop(int value) {
   pthread_mutex_unlock(&stop_lock);
 }
 
+/* The second thread having got a turn, which is a thing to wait for
+ * rather than a thing to hope for.
+ *
+ * The case below asserts that the intruding thread made at least one
+ * call, and natively it makes thousands. Under memcheck it made none:
+ * valgrind runs one thread at a time and hands the turn over at points
+ * of its own choosing, and the first thread never blocks, so it can run
+ * its five hundred statements and set the stop flag before the thread
+ * it started has been let go once. The assertion was then false about
+ * the scheduler rather than about the engine.
+ *
+ * So the first thread blocks on this instead, and the second thread is
+ * let go because something is waiting for it. It cannot hang: the only
+ * way past the wait is a call the second thread has already made, and
+ * the second thread makes one before it looks at the stop flag a second
+ * time. */
+static pthread_cond_t ran = PTHREAD_COND_INITIALIZER;
+static int has_run;
+
+static void note_a_run(void) {
+  pthread_mutex_lock(&stop_lock);
+  has_run = 1;
+  pthread_cond_signal(&ran);
+  pthread_mutex_unlock(&stop_lock);
+}
+
+static void wait_for_a_run(void) {
+  pthread_mutex_lock(&stop_lock);
+  while (!has_run) {
+    pthread_cond_wait(&ran, &stop_lock);
+  }
+  pthread_mutex_unlock(&stop_lock);
+}
+
 static void *share_the_connection(void *arg) {
   struct sharer *s = (struct sharer *)arg;
   while (!should_stop()) {
@@ -280,6 +314,7 @@ static void *share_the_connection(void *arg) {
     zu_status st = zu_query_z(s->conn, "RETURN 1 AS one", &res, NULL);
     zu_result_free(res);
     s->calls++;
+    note_a_run();
     if (st == ZU_MISUSE_CONCURRENT) {
       s->refused++;
     } else if (st == ZU_OK) {
@@ -312,6 +347,7 @@ ZT_TEST(one_connection_in_two_threads_is_refused_rather_than_raced) {
 
   memset(&state, 0, sizeof state);
   set_stop(0);
+  has_run = 0;
 
   ZT_CHECK_EQ(zu_memory(&conn, NULL), ZU_OK);
   state.conn = conn;
@@ -347,6 +383,7 @@ ZT_TEST(one_connection_in_two_threads_is_refused_rather_than_raced) {
     zu_result_free(res);
   }
 
+  wait_for_a_run();
   set_stop(1);
   pthread_join(other, NULL);
 
@@ -414,7 +451,7 @@ ZT_TEST(an_interrupt_from_another_thread_stops_the_statement_and_not_the_connect
    * the connection has to run the next statement normally, which is
    * what the header says makes this different from closing it. */
   static int64_t many[3000];
-  const uint64_t rows = zt_rows(3000);
+  const uint64_t rows = 3000;
   zu_database *db = NULL;
   zu_conn *conn = NULL;
   zu_frame *frame = NULL;

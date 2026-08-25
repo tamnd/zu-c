@@ -570,7 +570,7 @@ ZT_TEST(a_call_back_into_the_library_from_the_watcher_is_refused_rather_than_rac
    * call made from inside it is a call made from a second thread at a
    * moment when the first is certainly inside the executor. */
   static int64_t ids[3000];
-  const uint64_t rows = zt_rows(3000);
+  const uint64_t rows = 3000;
   zu_database *db = NULL;
   zu_conn *conn = NULL;
   zu_frame *frame = NULL;

@@ -86,13 +86,25 @@ EXPAND_ONLY_PREDEF     = YES
 # reader's problem and not Doxygen's, so they are written out here as
 # the values the reference is generated at.
 #
-# ZU_FORMATTER expands to nothing so that its ten invocations do not
-# arrive as ten functions nobody declared. The macro itself is
+# ZU_HAS_INT128 is the same pair for the same reason, and __SIZEOF_INT128__
+# is the compiler macro it is defined from rather than a library one.
+# The value is 16, which is what GCC and Clang set it to, though nothing
+# here reads it: what matters is that it is defined, since that is the
+# whole of the test. Without the pair, Decimal::wide and
+# Decimal::unscaled are thrown away before Doxygen sees them, and two
+# published names would then be missing from the reference and from
+# api/surface.txt while being present in the header on every compiler
+# this project builds on.
+#
+# ZU_FORMATTER expands to nothing so that its eleven invocations do not
+# arrive as eleven functions nobody declared. The macro itself is
 # documented where it is defined and names what it specializes, and
-# docs/surface.py puts the ten back, because a specialization a caller
-# formats against is published whether Doxygen sees it or not.
+# docs/surface.py puts the eleven back, because a specialization a
+# caller formats against is published whether Doxygen sees it or not.
 PREDEFINED             = __cpp_lib_expected=202202L \
                          __cpp_lib_format=201907L \
+                         __SIZEOF_INT128__=16 \
                          ZU_HAS_EXPECTED=1 \
                          ZU_HAS_FORMAT=1 \
+                         ZU_HAS_INT128=1 \
                          ZU_FORMATTER(TYPE)=

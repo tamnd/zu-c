@@ -1,0 +1,71 @@
+# The five blocks the engine keeps, named one at a time.
+#
+# tamnd/zu#778. Closing a connection gives everything back, except
+# after the connection has been interrupted or shared with a second
+# thread, and then five allocations survive it: the database, the
+# connection, the frame, the statement, and the connection the other
+# case made without a database of its own. Between them they hold
+# 14,349 more bytes indirectly, which is what a live connection would
+# be expected to hold.
+#
+# The other suite in this job, misuse, opens and closes hundreds of the
+# same handles the same way and reports nothing at all, so this is not
+# closing a connection leaking. It is closing a connection leaking
+# after something has happened to it, which is the engine's to find
+# with an unstripped build of its own.
+#
+# Each of these names the call the block came in through and the case
+# that made it, so the suppression covers those two cases and nothing
+# else. A connection zu-c forgot to close anywhere else in this suite,
+# or a result it forgot to free, is a different stack and is still an
+# error. That is the whole reason these are written out one at a time
+# rather than as one rule about libzu.so: a rule that broad would
+# suppress the bug this job exists to catch.
+#
+# They come out when 778 closes.
+
+{
+   778: the database an interrupted connection was opened on
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:zu_database_memory
+   fun:an_interrupt_from_another_thread_stops_the_statement_and_not_the_connection
+}
+
+{
+   778: the connection that was interrupted
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:zu_connect
+   fun:an_interrupt_from_another_thread_stops_the_statement_and_not_the_connection
+}
+
+{
+   778: the frame registered on it
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:zu_frame_new
+   fun:zu_frame_new_z
+   fun:an_interrupt_from_another_thread_stops_the_statement_and_not_the_connection
+}
+
+{
+   778: the statement the interrupt stopped
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:zu_query
+   fun:an_interrupt_from_another_thread_stops_the_statement_and_not_the_connection
+}
+
+{
+   778: the connection two threads shared
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:zu_memory
+   fun:one_connection_in_two_threads_is_refused_rather_than_raced
+}

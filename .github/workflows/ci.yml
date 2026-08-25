@@ -248,28 +248,38 @@ jobs:
       # The two C files, because they are the ones that hand raw
       # pointers across and give everything back by hand.
       #
-      # Definitely and indirectly lost are errors. Possibly lost is not:
-      # it is one block of 180 bytes, it belongs to a thread the library
-      # started, and a pointer into the middle of a block is how a
-      # thread-local arena looks to a leak checker rather than how a
-      # leak looks.
+      # Definitely lost is an error. Indirectly lost is shown and not
+      # counted, because an indirectly lost block is by definition one
+      # hanging off a definitely lost block: count the root and the
+      # children come with it, and a leak that had no root would not be
+      # indirect. It is the spelling that lets the five roots the engine
+      # keeps be suppressed by name in test/memcheck.supp rather than by
+      # a rule about libzu.so wide enough to hide this job's own point.
+      # Possibly lost is not an error either: it is one block of 180
+      # bytes, it belongs to a thread the library started, and a pointer
+      # into the middle of a block is how a thread-local arena looks to
+      # a leak checker rather than how a leak looks.
       #
-      # ZU_TEST_ROWS shrinks the two fixtures that exist to be slow.
-      # Memcheck already runs the machine forty times slower, which is
-      # another way of getting a statement that lasts long enough to be
-      # interrupted, so the smaller number tests the same thing in a
-      # fifth of the wall clock.
+      # This used to set ZU_TEST_ROWS to 300, to shrink the two fixtures
+      # that exist in order to be slow, on the reasoning that memcheck
+      # runs the machine forty times slower and that is another way of
+      # getting a statement long enough to be watched and interrupted.
+      # The arithmetic does not work: the statement counts pairs, so a
+      # tenth of the rows is a hundredth of the work, and a hundredth
+      # slowed by forty is shorter than the whole fixture is natively.
+      # The watcher never fired, and the case that says it fired is the
+      # one that has been red here since this job was added. The whole
+      # fixture runs now and this job costs a minute more.
       - name: The C suites under memcheck
         run: |
           set -eu
           for t in misuse threads; do
             valgrind --error-exitcode=99 --leak-check=full \
               --show-leak-kinds=definite,indirect \
-              --errors-for-leak-kinds=definite,indirect \
+              --errors-for-leak-kinds=definite \
+              --suppressions=test/memcheck.supp \
               --track-origins=yes "./build-vg/test/$t"
           done
-        env:
-          ZU_TEST_ROWS: 300
 
   # The reference, built the same way the release builds it, and graded
   # rather than glanced at.

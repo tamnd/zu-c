@@ -1,5 +1,7 @@
 define ZU_HAS_EXPECTED
 define ZU_HAS_FORMAT
+define ZU_HAS_INT128
+formatter std::formatter< zu::Decimal >
 formatter std::formatter< zu::Error >
 formatter std::formatter< zu::Node >
 formatter std::formatter< zu::Position >
@@ -121,6 +123,16 @@ func static zu::Database::try_create(std::string_view, const Config & = Config{}
 func static zu::Database::try_memory(const Config & = Config{}) -> expected< Database >
 func static zu::Database::try_open(std::string_view, const Config & = Config{}) -> expected< Database >
 func zu::Database::try_path() const -> expected< std::string_view >
+struct zu::Decimal
+func zu::Decimal::as_double() const noexcept -> double
+var zu::Decimal::hi -> std::int64_t
+var zu::Decimal::lo -> std::uint64_t
+func static zu::Decimal::of(std::int64_t, std::int32_t) noexcept -> Decimal
+friend zu::Decimal::operator==(const Decimal &, const Decimal &) = default -> bool
+var zu::Decimal::scale -> std::int32_t
+func zu::Decimal::unscaled() const noexcept -> __int128
+func zu::Decimal::unscaled64() const noexcept -> std::optional< std::int64_t >
+func static zu::Decimal::wide(__int128, std::int32_t) noexcept -> Decimal
 class zu::Error
 func zu::Error::Error() = default
 func zu::Error::code() const noexcept -> std::optional< std::string_view >
@@ -382,6 +394,7 @@ enum zu::Type -> int
 enum value zu::Type::binding_table -> ZU_TYPE_BINDING_TABLE
 enum value zu::Type::boolean -> ZU_TYPE_BOOL
 enum value zu::Type::bytes -> ZU_TYPE_BYTES
+enum value zu::Type::decimal -> ZU_TYPE_DECIMAL
 enum value zu::Type::floating -> ZU_TYPE_FLOAT
 enum value zu::Type::graph -> ZU_TYPE_GRAPH
 enum value zu::Type::integer -> ZU_TYPE_INT
@@ -398,6 +411,7 @@ func explicit zu::Value::Value(const zu_value *) noexcept
 func zu::Value::Value() = default
 func zu::Value::as_bool() const -> bool
 func zu::Value::as_bytes() const -> std::span< const std::uint8_t >
+func zu::Value::as_decimal() const -> Decimal
 func zu::Value::as_double() const -> double
 func zu::Value::as_int() const -> std::int64_t
 func zu::Value::as_node() const -> Node
@@ -415,6 +429,7 @@ func zu::Value::raw() const noexcept -> const zu_value *
 func zu::Value::size() const noexcept -> std::uint64_t
 func zu::Value::try_as_bool() const -> expected< bool >
 func zu::Value::try_as_bytes() const -> expected< std::span< const std::uint8_t > >
+func zu::Value::try_as_decimal() const -> expected< Decimal >
 func zu::Value::try_as_double() const -> expected< double >
 func zu::Value::try_as_int() const -> expected< std::int64_t >
 func zu::Value::try_as_node() const -> expected< Node >
@@ -461,6 +476,7 @@ func zu::to_string(Status) noexcept -> std::string_view
 func zu::to_string(Temporal) -> std::string
 func zu::to_string(TemporalKind) noexcept -> std::string_view
 func zu::to_string(Type) noexcept -> std::string_view
+func zu::to_string(const Decimal &) -> std::string
 func zu::to_string(const Error &) -> std::string
 func zu::to_string(const Value &) -> std::string
 func zu::version() -> std::string_view
