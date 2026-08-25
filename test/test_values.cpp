@@ -121,6 +121,124 @@ ZU_TEST(octets_and_text_are_not_read_as_one_another) {
   CHECK_THROWS_AS(zu::Exception, r.cell(0, 1).as_bytes());
 }
 
+ZU_TEST(a_decimal_comes_back_with_the_digits_it_was_written_with) {
+  auto conn = zu::Connection::memory();
+  /* CAST is the only way to reach a decimal today. There is no literal
+   * spelling for one and no column may be declared DECIMAL, so this is
+   * where they come from and the reason every case here asks this way. */
+  auto r = conn.query("RETURN CAST('1.20' AS DECIMAL(5, 2)) AS v");
+  CHECK_EQ(r.type(0, 0), zu::Type::decimal);
+
+  const zu::Decimal d = r.cell(0, 0).as_decimal();
+  CHECK(d.unscaled64().has_value());
+  CHECK_EQ(*d.unscaled64(), 120);
+  CHECK_EQ(d.scale, 2);
+  /* Both places, which is the whole point of the type: a double would
+   * have had neither the value nor the count of digits. */
+  CHECK_EQ(zu::to_string(d), std::string("1.20"));
+
+  /* The same value through the typed reader, and equal to one written
+   * here, because a Decimal is compared member by member. */
+  CHECK(r.row(0).get<zu::Decimal>(0) == zu::Decimal::of(120, 2));
+  CHECK(r.row(0).get<zu::Decimal>("v") == d);
+}
+
+ZU_TEST(a_decimal_keeps_its_sign_and_its_noughts) {
+  struct Case {
+    const char* text;
+    std::int32_t places;
+  };
+  /* Written out rather than derived from the text, so that the case
+   * says what scale it expects instead of agreeing with itself. */
+  const Case cases[] = {
+      {"0", 0},      {"1.20", 2},  {"-0.05", 2},  {"1234", 0},
+      {"0.005", 3},  {"0.000", 3}, {"-1234.5678", 4},
+  };
+
+  auto conn = zu::Connection::memory();
+  for (const Case& one : cases) {
+    const std::string statement = std::string("RETURN CAST('") + one.text +
+                                  "' AS DECIMAL(38, " + std::to_string(one.places) + ")) AS v";
+    auto r = conn.query(statement);
+    const zu::Decimal d = r.cell(0, 0).as_decimal();
+    CHECK_EQ(d.scale, one.places);
+    /* Nothing is normalised on the way through, so 0.000 keeps its
+     * three places and -0.05 keeps the nought it needs to have a
+     * hundredth at all. */
+    CHECK_EQ(zu::to_string(d), std::string(one.text));
+  }
+}
+
+ZU_TEST(a_decimal_wider_than_an_int64_arrives_whole) {
+  auto conn = zu::Connection::memory();
+  /* Thirty eight digits, which is the widest DECIMAL(p, s) may be
+   * declared and the widest the 128 bit integer behind it holds. */
+  const std::string digits(38, '1');
+  auto r = conn.query("RETURN CAST('" + digits + "' AS DECIMAL(38, 0)) AS v");
+
+  const zu::Decimal d = r.cell(0, 0).as_decimal();
+  CHECK_EQ(zu::to_string(d), digits);
+  /* Nineteen digits is where an int64_t stops, so this one says so
+   * rather than handing back a number that is not the number. */
+  CHECK(!d.unscaled64().has_value());
+  CHECK(d.hi != 0);
+#if ZU_HAS_INT128
+  CHECK(zu::Decimal::wide(d.unscaled(), d.scale) == d);
+#endif
+}
+
+ZU_TEST(a_decimal_is_not_a_double_and_does_not_read_as_one) {
+  auto conn = zu::Connection::memory();
+  auto r = conn.query("RETURN CAST('0.1' AS DECIMAL(5, 1)) AS a, "
+                      "CAST('0.2' AS DECIMAL(5, 1)) AS b");
+  /* Reading it as a float is refused at the call rather than answered
+   * approximately, which is what makes the exactness a property of the
+   * API and not of how carefully the caller reads the docs. */
+  CHECK_THROWS_AS(zu::Exception, r.cell(0, 0).as_double());
+
+  const double a = r.cell(0, 0).as_decimal().as_double();
+  const double b = r.cell(0, 1).as_decimal().as_double();
+  /* And the loss, said out loud. A tenth is not a binary fraction, so
+   * this is the sum a program that went through double would get. */
+  CHECK(a + b != 0.3);
+  CHECK(a > 0.09 && a < 0.11);
+
+  /* A negative one, where the two halves point opposite ways: the high
+   * half is -1 and the low is a hair under two to the sixty four, and
+   * adding those up as doubles is an enormous negative plus an enormous
+   * positive that cancels down to nothing. The sign has to come off
+   * before the sum, and this is the case that says it did. */
+  CHECK_EQ(zu::Decimal::of(-12345678, 4).as_double(), -1234.5678);
+}
+
+ZU_TEST(a_decimal_written_here_prints_as_the_number_it_is) {
+  /* No engine in this one. to_string is arithmetic over the two halves
+   * and the scale, and it is worth checking on the edges rather than
+   * only on what a CAST happens to produce. */
+  CHECK_EQ(zu::to_string(zu::Decimal::of(0, 0)), std::string("0"));
+  CHECK_EQ(zu::to_string(zu::Decimal::of(0, 3)), std::string("0.000"));
+  CHECK_EQ(zu::to_string(zu::Decimal::of(1200, 3)), std::string("1.200"));
+  CHECK_EQ(zu::to_string(zu::Decimal::of(-5, 2)), std::string("-0.05"));
+  CHECK_EQ(zu::to_string(zu::Decimal::of(-1, 0)), std::string("-1"));
+
+  /* Ten to the nineteen, which is past an int64_t and so past the half
+   * the halves are usually all of, and the carry from the low half into
+   * the high one is what this checks. */
+  const zu::Decimal wide{0, 10000000000000000000ull, 0};
+  CHECK_EQ(zu::to_string(wide), std::string("10000000000000000000"));
+
+  /* The most negative 128 bit number, whose magnitude has no positive
+   * counterpart. Negating it gives the same bits back, which is what
+   * the digits are read out of. */
+  const zu::Decimal floor{static_cast<std::int64_t>(0x8000000000000000ull), 0, 0};
+  CHECK_EQ(zu::to_string(floor),
+           std::string("-170141183460469231731687303715884105728"));
+
+  /* Two scales of one number are two decimals here, because each prints
+   * the way it was written. */
+  CHECK(zu::Decimal::of(120, 2) != zu::Decimal::of(12, 1));
+}
+
 ZU_TEST(a_node_is_a_table_and_a_row) {
   zt::TempDir dir("node");
   const std::string path = dir.file("people.zu");

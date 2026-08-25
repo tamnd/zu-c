@@ -54,6 +54,7 @@
 
 #include <zu.h>
 
+#include <algorithm>
 #include <chrono>
 #include <compare>
 #include <cstddef>
@@ -115,6 +116,19 @@
 #define ZU_HAS_FORMAT 0
 #endif
 
+#if defined(__SIZEOF_INT128__)
+/** 1 when this compiler has __int128 and zu::Decimal hands the unscaled
+ * integer over as one, 0 when it does not and the two halves are the
+ * whole of it. There is no standard feature test to read here, because
+ * a 128 bit integer is not a standard type: it is an extension GCC and
+ * Clang offer on every 64 bit target and MSVC offers on none, so the
+ * question is which compiler this is rather than which standard.
+ * Everything else Decimal does is defined either way. */
+#define ZU_HAS_INT128 1
+#else
+#define ZU_HAS_INT128 0
+#endif
+
 namespace zu {
 
 /* ---- what a call answered ---- */
@@ -162,9 +176,14 @@ enum class Type : int {
   graph = ZU_TYPE_GRAPH,
   binding_table = ZU_TYPE_BINDING_TABLE,
   /** Octets rather than text, so nothing here is validated as UTF-8 and
-   * nothing is decoded on the way out. Last in the list because the
+   * nothing is decoded on the way out. Late in the list because the
    * order is the ABI's numbering and this is what ABI 0.14 added. */
   bytes = ZU_TYPE_BYTES,
+  /** An exact number, read as a zu::Decimal and not as a double. The
+   * point of the type is the digits the caller wrote, and binary
+   * floating point is where those go, so as_double is not the reader
+   * for this and does not answer for it. ABI 0.15 added it. */
+  decimal = ZU_TYPE_DECIMAL,
 };
 
 /** Which temporal a temporal is. The unit follows the kind: days for a
@@ -301,6 +320,150 @@ struct Temporal {
   }
   std::chrono::minutes east() const { return std::chrono::minutes{offset}; }
   ///@}
+};
+
+namespace detail {
+
+/** A 128 bit two's complement integer taken apart into how big it is
+ * and which way it points, which is the shape both of the things done
+ * with a decimal's unscaled integer want it in.
+ *
+ * The sign has to come off first either way. Printing wants the digits
+ * and a minus in front of them, and adding the halves up as a double
+ * wants two numbers that point the same way: a negative value has a
+ * high half of -1 and a low half a hair under two to the sixty four,
+ * and adding those two as doubles is one enormous negative plus one
+ * enormous positive, which cancels down to nothing and takes every
+ * digit that mattered with it. */
+struct Magnitude {
+  /** The top 64 bits of how big it is. */
+  std::uint64_t hi = 0;
+  /** The bottom 64 bits of how big it is. */
+  std::uint64_t lo = 0;
+  /** Which way it pointed before the sign came off. */
+  bool negative = false;
+};
+
+/** Splits one apart. The most negative value has no positive
+ * counterpart, so negating it gives the same bits back, which is
+ * exactly the magnitude wanted: it is read as unsigned from here on and
+ * never asked to be a signed number again. */
+inline Magnitude magnitude128(std::int64_t hi, std::uint64_t lo) noexcept {
+  Magnitude out{static_cast<std::uint64_t>(hi), lo, hi < 0};
+  if (out.negative) {
+    out.hi = ~out.hi;
+    out.lo = ~out.lo;
+    if (++out.lo == 0) {
+      out.hi++;
+    }
+  }
+  return out;
+}
+
+}  // namespace detail
+
+/** An exact number: an integer of unscaled units, and how many of its
+ * digits stand to the right of the point. The value is the unscaled
+ * integer times ten to the minus scale, so 1234 at scale 2 is 12.34 and
+ * 1234 at scale 0 is 1234.
+ *
+ * It is not a double and it does not become one on the way here. A
+ * tenth is not a binary fraction, so a price read as binary floating
+ * point is not the price that was written, and the whole reason the
+ * engine has this type is to keep the digits the statement asked for
+ * all the way to the caller. to_string writes them out; as_double is
+ * the conversion that gives them up, and it is spelled as a call so
+ * that giving them up is something a program is seen to do.
+ *
+ * The unscaled integer is 128 bits, which holds thirty eight digits and
+ * so holds every decimal the engine will declare. It is kept as the two
+ * halves the ABI hands over, because C++ has no standard type that wide
+ * and MSVC has no extension either. unscaled() rebuilds it on a
+ * compiler that does, and unscaled64() answers for the values that fit
+ * a plain int64_t, which is most of them. */
+struct Decimal {
+  /** The top 64 bits of the unscaled integer, two's complement, so this
+   * is 0 or -1 for every value an int64_t would hold. */
+  std::int64_t hi = 0;
+  /** The bottom 64 bits of the same integer, unsigned. */
+  std::uint64_t lo = 0;
+  /** How many of the digits are after the point, from 0 to 38. Never
+   * negative: a decimal with no fraction has a scale of nought. */
+  std::int32_t scale = 0;
+
+  /** Equal when all three agree, so 12.30 and 12.3 are two decimals
+   * here. They are one number and the engine compares them equal, but
+   * they are not the same value: each prints the way it was written and
+   * a test that expected two places should not pass on one. */
+  friend bool operator==(const Decimal&, const Decimal&) = default;
+
+  /** Builds one from an unscaled integer that fits an int64_t and a
+   * scale. The sign is extended into the high half, which is what makes
+   * -1 at scale 0 minus one rather than a very large positive. */
+  static Decimal of(std::int64_t unscaled, std::int32_t scale) noexcept {
+    return Decimal{unscaled < 0 ? -1 : 0, static_cast<std::uint64_t>(unscaled), scale};
+  }
+
+#if ZU_HAS_INT128
+  ///@{
+  /** The full 128 bit integer, taken and given back, on a compiler with
+   * a type that wide.
+   *
+   * A second name rather than an overload of of(), because a literal
+   * written in a call is an int and converts to either width equally
+   * well, so two overloads would make Decimal::of(1234, 2) ambiguous on
+   * exactly the compilers that have both. */
+  static Decimal wide(__int128 unscaled, std::int32_t scale) noexcept {
+    return Decimal{static_cast<std::int64_t>(static_cast<unsigned __int128>(unscaled) >> 64),
+                   static_cast<std::uint64_t>(unscaled), scale};
+  }
+  __int128 unscaled() const noexcept {
+    return static_cast<__int128>((static_cast<unsigned __int128>(static_cast<std::uint64_t>(hi))
+                                  << 64) |
+                                 lo);
+  }
+  ///@}
+#endif
+
+  /** The unscaled integer when it fits an int64_t, and nothing when it
+   * does not. Nineteen digits is where that line falls and the engine's
+   * decimals go to thirty eight, so a caller who reads this has to say
+   * what to do with the ones that do not fit, which is the point of
+   * answering an optional rather than a wrapped number. */
+  std::optional<std::int64_t> unscaled64() const noexcept {
+    const std::int64_t narrow = static_cast<std::int64_t>(lo);
+    if ((narrow < 0 ? -1 : 0) != hi) {
+      return std::nullopt;
+    }
+    return narrow;
+  }
+
+  /** The number as a double, which is where the exactness stops.
+   *
+   * Almost every decimal loses something here, which is why it is a call
+   * with a name on it rather than a conversion the compiler will do
+   * behind a caller's back. It is offered because a program that is
+   * about to draw a chart wants a double and is entitled to say so. */
+  double as_double() const noexcept {
+    /* The magnitude first and the sign at the end. Two to the sixty
+     * four is what the high half counts, and adding the two halves up
+     * is only the value when both point the same way, which is what
+     * detail::Magnitude is for.
+     *
+     * Ten to the scale is built up and divided by once rather than
+     * dividing by ten as many times as the scale says, because each
+     * division rounds and doing thirty eight of them rounds thirty
+     * eight times. */
+    const detail::Magnitude m = detail::magnitude128(hi, lo);
+    const double whole =
+        static_cast<double>(m.hi) * 18446744073709551616.0 + static_cast<double>(m.lo);
+    double ten = 1.0;
+    for (std::int32_t i = 0; i < scale; i++) {
+      ten *= 10.0;
+    }
+    const double out = whole / ten;
+    return m.negative ? -out : out;
+  }
 };
 
 /* ---- errors ---- */
@@ -871,6 +1034,11 @@ class Value {
    * be valid UTF-8 is still a blob and a caller who wanted text should
    * be told the column is not text. */
   std::span<const std::uint8_t> as_bytes() const { return detail::unwrap(bytes_impl()); }
+  /** The exact number, digits and scale both. as_double does not answer
+   * for a decimal cell and is not meant to: a caller who wants the
+   * float has Decimal::as_double and asks for it there, where the
+   * losing of the digits is written down. */
+  Decimal as_decimal() const { return detail::unwrap(decimal_impl()); }
   Temporal as_temporal() const { return detail::unwrap(temporal_impl()); }
   Node as_node() const { return detail::unwrap(node_impl()); }
   Rel as_rel() const { return detail::unwrap(rel_impl()); }
@@ -910,6 +1078,9 @@ class Value {
   [[nodiscard]] expected<std::string_view> try_as_string() const { return detail::to_expected(string_impl()); }
   [[nodiscard]] expected<std::span<const std::uint8_t>> try_as_bytes() const {
     return detail::to_expected(bytes_impl());
+  }
+  [[nodiscard]] expected<Decimal> try_as_decimal() const {
+    return detail::to_expected(decimal_impl());
   }
   [[nodiscard]] expected<Temporal> try_as_temporal() const { return detail::to_expected(temporal_impl()); }
   [[nodiscard]] expected<Node> try_as_node() const { return detail::to_expected(node_impl()); }
@@ -964,6 +1135,14 @@ class Value {
       return std::span<const std::uint8_t>{};
     }
     return std::span<const std::uint8_t>(p, len);
+  }
+  detail::Outcome<Decimal> decimal_impl() const {
+    Decimal d;
+    if (auto e = detail::checked(zu_value_decimal(v_, &d.hi, &d.lo, &d.scale),
+                                 "zu_value_decimal")) {
+      return std::move(*e);
+    }
+    return d;
   }
   detail::Outcome<Temporal> temporal_impl() const {
     std::int32_t kind = 0;
@@ -1725,6 +1904,8 @@ T Row::get(std::uint32_t col) const {
     return std::vector<std::uint8_t>(v.begin(), v.end());
   } else if constexpr (std::is_same_v<T, bool>) {
     return result_->cell(row_, col).as_bool();
+  } else if constexpr (std::is_same_v<T, Decimal>) {
+    return result_->cell(row_, col).as_decimal();
   } else if constexpr (std::is_same_v<T, Temporal>) {
     return result_->cell(row_, col).as_temporal();
   } else if constexpr (std::is_same_v<T, Node>) {
@@ -3383,6 +3564,51 @@ inline std::string printed(double d) {
   return std::string(buf, len < sizeof buf ? len : sizeof buf - 1);
 }
 
+/** The digits of a 128 bit two's complement integer held as its two
+ * halves, with a minus in front where there is one.
+ *
+ * Written on the halves rather than on __int128 so that there is one
+ * implementation and not a portable one nobody exercises beside a fast
+ * one everybody does. Thirty nine divisions of a number this wide is
+ * nothing next to the query that produced it.
+ *
+ * The division is by ten, one digit at a time, and each round divides
+ * the high half and carries its remainder into the low. The low half is
+ * then done in two thirty two bit steps, because a remainder below ten
+ * shifted up by thirty two still fits a uint64_t while the same
+ * remainder shifted up by sixty four would not, and this header has no
+ * wider type to borrow. */
+inline std::string digits128(std::int64_t hi, std::uint64_t lo) {
+  const Magnitude m = magnitude128(hi, lo);
+  const bool negative = m.negative;
+  std::uint64_t high = m.hi;
+  std::uint64_t low = m.lo;
+  std::string digits;
+  while (high != 0 || low != 0) {
+    std::uint64_t carry = high % 10;
+    high /= 10;
+    std::uint64_t top = (carry << 32) | (low >> 32);
+    const std::uint64_t q_top = top / 10;
+    carry = top % 10;
+    const std::uint64_t bottom = (carry << 32) | (low & 0xffffffffu);
+    const std::uint64_t q_bottom = bottom / 10;
+    carry = bottom % 10;
+    low = (q_top << 32) | q_bottom;
+    digits.push_back(static_cast<char>('0' + carry));
+  }
+  if (digits.empty()) {
+    return "0";
+  }
+  if (negative) {
+    digits.push_back('-');
+  }
+  /* Built least significant first, which is the direction the division
+   * hands them over, so the string is turned round at the end rather
+   * than each digit being pushed to the front of it. */
+  std::reverse(digits.begin(), digits.end());
+  return digits;
+}
+
 }  // namespace detail
 
 ///@{
@@ -3455,6 +3681,7 @@ inline std::string_view to_string(Type t) noexcept {
     case Type::graph: return "graph";
     case Type::binding_table: return "binding_table";
     case Type::bytes: return "bytes";
+    case Type::decimal: return "decimal";
   }
   return "unknown";
 }
@@ -3501,6 +3728,43 @@ inline std::string to_string(Temporal t) {
     out += std::to_string(t.offset);
   }
   return out;
+}
+
+/** The number written out, with the point where the scale puts it and
+ * no exponent, which is the spelling every other client of this engine
+ * writes a decimal in and the one the conformance corpus expects.
+ *
+ * The scale is honoured rather than trimmed. 12.30 at scale 2 prints
+ * with both places and 12.3 at scale 1 prints with one, because the
+ * places are the thing the type is carrying and a printer that dropped
+ * a trailing zero would be dropping the answer to how precise this is.
+ *
+ * A number with fewer digits than its scale is all fraction, and the
+ * zeros in front of it belong to the value: 5 at scale 3 is 0.005 and
+ * not 5.000. */
+inline std::string to_string(const Decimal& d) {
+  std::string out = detail::digits128(d.hi, d.lo);
+  const bool negative = !out.empty() && out.front() == '-';
+  std::string_view digits = out;
+  if (negative) {
+    digits.remove_prefix(1);
+  }
+  if (d.scale <= 0) {
+    return out;
+  }
+  const std::size_t places = static_cast<std::size_t>(d.scale);
+  std::string front(negative ? "-" : "");
+  if (places >= digits.size()) {
+    front += "0.";
+    front.append(places - digits.size(), '0');
+    front += digits;
+    return front;
+  }
+  const std::size_t cut = digits.size() - places;
+  front += digits.substr(0, cut);
+  front += '.';
+  front += digits.substr(cut);
+  return front;
 }
 
 /** A failure on one line, which is what a log wants. Error::report is
@@ -3554,6 +3818,7 @@ inline std::string to_string(const Value& v) {
     case Type::rel: return to_string(v.as_rel());
     case Type::temporal: return to_string(v.as_temporal());
     case Type::bytes: return std::to_string(v.as_bytes().size()) + " bytes";
+    case Type::decimal: return to_string(v.as_decimal());
     default: break;
   }
   return std::string(to_string(v.type())) + " of " + std::to_string(v.size());
@@ -3565,10 +3830,10 @@ inline std::string to_string(const Value& v) {
 #if ZU_HAS_FORMAT
 /** std::format over the same text.
  *
- * Defines std::formatter for the ten types zu::to_string prints:
+ * Defines std::formatter for the eleven types zu::to_string prints:
  * Status, Severity, Type, TemporalKind, Position, Node, Rel, Temporal,
- * Error and Value. Each specialization is one line over the to_string
- * overload of the same type, so std::format("{}", v) and
+ * Decimal, Error and Value. Each specialization is one line over the
+ * to_string overload of the same type, so std::format("{}", v) and
  * zu::to_string(v) are the same bytes by construction rather than by
  * two pieces of code being kept in step.
  *
@@ -3614,6 +3879,7 @@ ZU_FORMATTER(zu::Position);
 ZU_FORMATTER(zu::Node);
 ZU_FORMATTER(zu::Rel);
 ZU_FORMATTER(zu::Temporal);
+ZU_FORMATTER(zu::Decimal);
 ZU_FORMATTER(zu::Error);
 ZU_FORMATTER(zu::Value);
 

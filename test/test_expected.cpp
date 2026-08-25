@@ -121,6 +121,22 @@ ZU_TEST(the_calls_abi_0_14_added_have_the_expected_spelling_too) {
   CHECK(!absent->has_value());
 }
 
+ZU_TEST(the_calls_abi_0_15_added_have_the_expected_spelling_too) {
+  auto conn = zu::Connection::memory();
+  auto r = conn.query("RETURN CAST('1.20' AS DECIMAL(5, 2)) AS d, 1 AS i");
+
+  const auto d = r.cell(0, 0).try_as_decimal();
+  CHECK(d.has_value());
+  CHECK_EQ(d->scale, 2);
+  CHECK_EQ(d->unscaled64().value(), 120);
+
+  /* An integer is not a decimal, and here that comes back rather than
+   * throws, on the same terms as every other reader on this class. */
+  const auto wrong = r.cell(0, 1).try_as_decimal();
+  CHECK(!wrong.has_value());
+  CHECK_EQ(wrong.error().status(), zu::Status::misuse);
+}
+
 ZU_TEST(the_bulk_paths_have_the_expected_spelling_too) {
   zt::TempDir dir("expected");
   const std::string path = dir.file("people.zu");
