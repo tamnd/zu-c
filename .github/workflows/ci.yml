@@ -248,11 +248,17 @@ jobs:
       # The two C files, because they are the ones that hand raw
       # pointers across and give everything back by hand.
       #
-      # Definitely and indirectly lost are errors. Possibly lost is not:
-      # it is one block of 180 bytes, it belongs to a thread the library
-      # started, and a pointer into the middle of a block is how a
-      # thread-local arena looks to a leak checker rather than how a
-      # leak looks.
+      # Definitely lost is an error. Indirectly lost is shown and not
+      # counted, because an indirectly lost block is by definition one
+      # hanging off a definitely lost block: count the root and the
+      # children come with it, and a leak that had no root would not be
+      # indirect. It is the spelling that lets the five roots the engine
+      # keeps be suppressed by name in test/memcheck.supp rather than by
+      # a rule about libzu.so wide enough to hide this job's own point.
+      # Possibly lost is not an error either: it is one block of 180
+      # bytes, it belongs to a thread the library started, and a pointer
+      # into the middle of a block is how a thread-local arena looks to
+      # a leak checker rather than how a leak looks.
       #
       # This used to set ZU_TEST_ROWS to 300, to shrink the two fixtures
       # that exist in order to be slow, on the reasoning that memcheck
@@ -270,7 +276,8 @@ jobs:
           for t in misuse threads; do
             valgrind --error-exitcode=99 --leak-check=full \
               --show-leak-kinds=definite,indirect \
-              --errors-for-leak-kinds=definite,indirect \
+              --errors-for-leak-kinds=definite \
+              --suppressions=test/memcheck.supp \
               --track-origins=yes "./build-vg/test/$t"
           done
 
