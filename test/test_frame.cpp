@@ -156,7 +156,10 @@ ZU_TEST(a_bitmap_is_a_column_of_booleans) {
   frame.bools("on", bitmap, 4);
   conn.register_frame(frame);
 
-  auto r = conn.query("MATCH (f:Flag) RETURN f.on AS on");
+  /* The alias in accent quotes because ON is a reserved word. The
+     property is still named on, and a property is read by name rather
+     than parsed as one, which is why only the alias needs them. */
+  auto r = conn.query("MATCH (f:Flag) RETURN f.on AS `on`");
   CHECK_EQ(r.rows(), 4u);
   CHECK_EQ(r.row(0).get<bool>(0), true);
   CHECK_EQ(r.row(1).get<bool>(0), false);
@@ -215,7 +218,9 @@ ZU_TEST(a_date_goes_in_as_the_days_it_is_and_comes_back_as_a_date) {
   frame.column("on", on, 1, zu::TemporalKind::date);
   conn.register_frame(frame);
 
-  auto r = conn.query("MATCH (e:Event) RETURN e.on AS on");
+  /* Accent quotes for the same reason they are up in the bitmap test:
+     ON is a reserved word and an alias is a name being written. */
+  auto r = conn.query("MATCH (e:Event) RETURN e.on AS `on`");
   const zu::Temporal first = r.row(0).get<zu::Temporal>(0);
   CHECK_EQ(first.kind, zu::TemporalKind::date);
   CHECK_EQ(first.count, 19782);
