@@ -6,8 +6,11 @@
  * error, what succeeds returns a value, and the error carries the same
  * GQLSTATUS either way.
  *
- * The whole file compiles to nothing under C++20, because std::expected
- * arrived in 23 and the throwing half is complete on its own. */
+ * The whole file compiles to nothing on a toolchain with no
+ * std::expected, which is every C++20 build and also clang against
+ * libstdc++, where the two disagree about concepts and the C++23
+ * library never switches on. The throwing half is complete on its own,
+ * so that is a narrower API rather than a broken one. */
 #include <zu.hpp>
 
 #include "fixture.hpp"
@@ -184,16 +187,24 @@ ZU_TEST(a_frame_registers_without_throwing) {
  * half of the API a caller who builds without exceptions depends on
  * had not been compiled anywhere for months.
  *
- * So the floor build says so out loud. Below C++23 there is nothing to
- * run here and the throwing half is complete on its own; at C++23 and
- * above, this half not being there is a broken build rather than a
- * quiet one, and the compiler is the only thing positioned to notice.
+ * So the floor build says so out loud, and what it asks is the
+ * question the bug was: does this library have std::expected, and did
+ * zu.hpp fail to see it. Not whether the standard is C++23, which is a
+ * different question with a different answer. Clang reports
+ * __cpp_concepts as 201907L rather than 202002L, and libstdc++ gates
+ * every C++23 library feature on the later number, so clang against
+ * libstdc++ at -std=c++23 has no std::expected at all. That is a
+ * toolchain without it and not a header that mislaid it, and asking
+ * about the standard alone called it the second.
  *
- * MSVC without /Zc:__cplusplus reports 199711L, which skips the check
- * rather than firing it, and a gate that is off is better than a gate
- * that is wrong. */
-#if __cplusplus > 202002L
-#error "C++23 or later and no std::expected: zu.hpp turned the try_ half off. Check that <version> is included before the feature tests in zu.hpp rather than deleting this line."
+ * <version> is included here rather than left to zu.hpp, because zu.hpp
+ * having included it is the thing being checked. If it stops, the macro
+ * is undefined while zu.hpp reads it and defined by the time this does,
+ * which is the whole of the original bug and is what fires this. */
+#include <version>
+
+#if defined(__cpp_lib_expected) && __cpp_lib_expected >= 202202L
+#error "std::expected is in this library and zu.hpp turned the try_ half off anyway. Check that <version> is included before the feature tests in zu.hpp rather than deleting this line."
 #endif
 
 ZU_TEST(this_toolchain_has_no_std_expected_and_the_throwing_half_is_enough) {
