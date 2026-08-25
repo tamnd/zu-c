@@ -254,11 +254,16 @@ jobs:
       # thread-local arena looks to a leak checker rather than how a
       # leak looks.
       #
-      # ZU_TEST_ROWS shrinks the two fixtures that exist to be slow.
-      # Memcheck already runs the machine forty times slower, which is
-      # another way of getting a statement that lasts long enough to be
-      # interrupted, so the smaller number tests the same thing in a
-      # fifth of the wall clock.
+      # This used to set ZU_TEST_ROWS to 300, to shrink the two fixtures
+      # that exist in order to be slow, on the reasoning that memcheck
+      # runs the machine forty times slower and that is another way of
+      # getting a statement long enough to be watched and interrupted.
+      # The arithmetic does not work: the statement counts pairs, so a
+      # tenth of the rows is a hundredth of the work, and a hundredth
+      # slowed by forty is shorter than the whole fixture is natively.
+      # The watcher never fired, and the case that says it fired is the
+      # one that has been red here since this job was added. The whole
+      # fixture runs now and this job costs a minute more.
       - name: The C suites under memcheck
         run: |
           set -eu
@@ -268,8 +273,6 @@ jobs:
               --errors-for-leak-kinds=definite,indirect \
               --track-origins=yes "./build-vg/test/$t"
           done
-        env:
-          ZU_TEST_ROWS: 300
 
   # The reference, built the same way the release builds it, and graded
   # rather than glanced at.

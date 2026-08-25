@@ -230,7 +230,7 @@ static inline int zt_next_fd(void) {
   return fd;
 }
 
-/* How many rows a fixture that exists in order to be slow should hold.
+/* How long a fixture that exists in order to be slow has to last.
  *
  * Two cases here need a statement that is still running when something
  * else happens to it: the progress watcher has to fire while it runs,
@@ -238,30 +238,21 @@ static inline int zt_next_fd(void) {
  * counting pairs over three thousand people, which takes about a third
  * of a second and is nothing.
  *
- * Under valgrind it is not nothing. Memcheck runs somewhere between
- * twenty and fifty times slower, and a third of a second becomes ten
- * seconds or more of a job whose other cases finish instantly. So the
- * valgrind runs pass a smaller number, and get the same behaviour for
- * the same reason: what those two cases need is a statement that lasts
- * long enough to be interrupted, and slowing the machine down by forty
- * is another way of arriving at one.
+ * There used to be a ZU_TEST_ROWS here that shrank the number, and the
+ * valgrind job set it to three hundred on the reasoning that memcheck
+ * already runs the machine forty times slower and that is another way
+ * of getting a statement that lasts. It is not. The work is pairs, so
+ * a tenth of the rows is a hundredth of the statement, and a hundredth
+ * slowed by forty is four tenths: under memcheck at three hundred rows
+ * the statement was shorter than it is here at three thousand. The
+ * watcher never fired, the case that asserts it fired failed, and the
+ * case that asserts an interrupt lands was next in the same job and
+ * would have failed the same way.
  *
- * The default is the whole number, so nothing changes for anyone who
- * does not set it, and the value is clamped at the whole number so a
- * larger one cannot overrun the array the caller sized. */
-static inline uint64_t zt_rows(uint64_t whole) {
-  const char *set = getenv("ZU_TEST_ROWS");
-  unsigned long asked;
-  char *end = NULL;
-  if (set == NULL || *set == '\0') {
-    return whole;
-  }
-  asked = strtoul(set, &end, 10);
-  if (end == set || asked == 0) {
-    return whole;
-  }
-  return (uint64_t)asked > whole ? whole : (uint64_t)asked;
-}
+ * So there is no knob. The number is written where it is used, the two
+ * cases cost the valgrind job the minute they cost it, and what they
+ * check is a thing that happened rather than a thing that had time to.
+ */
 
 typedef struct zt_case {
   const char *name;

@@ -414,7 +414,7 @@ ZT_TEST(an_interrupt_from_another_thread_stops_the_statement_and_not_the_connect
    * the connection has to run the next statement normally, which is
    * what the header says makes this different from closing it. */
   static int64_t many[3000];
-  const uint64_t rows = zt_rows(3000);
+  const uint64_t rows = 3000;
   zu_database *db = NULL;
   zu_conn *conn = NULL;
   zu_frame *frame = NULL;
